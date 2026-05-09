@@ -25,6 +25,7 @@ import json
 import time
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 from enum import Enum
 
@@ -37,7 +38,6 @@ except ImportError:
 # .env 자동 로드 (KAKAO_REST_API_KEY, KAKAO_MOBILITY_KEY)
 try:
     from dotenv import load_dotenv
-    from pathlib import Path
     _env_path = Path(__file__).parent.parent / '.env'
     if _env_path.exists():
         load_dotenv(_env_path, override=False)
@@ -299,6 +299,23 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
          + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
          * math.sin(d_lng / 2) ** 2)
     return R * 2 * math.asin(math.sqrt(a))
+
+
+def _load_nlic_db(port_lat: float, port_lng: float, radius_m: int) -> list[dict]:
+    """data/nlic_warehouses.json 로드 후 반경 내 창고만 반환."""
+    nlic_path = Path(__file__).parent.parent / 'data' / 'nlic_warehouses.json'
+    if not nlic_path.exists():
+        return []
+    try:
+        with open(nlic_path, encoding='utf-8') as f:
+            all_wh: list[dict] = json.load(f)
+        return [
+            wh for wh in all_wh
+            if haversine_km(port_lat, port_lng, wh['lat'], wh['lng']) * 1000 <= radius_m
+        ]
+    except Exception as e:
+        logger.warning(f'NLIC DB 로드 실패: {e}')
+        return []
 
 
 # ──────────────────────────────────────────────────────────
@@ -565,7 +582,7 @@ def recommend_storage(
     reqs = CARGO_REQUIREMENTS[cargo_type]
 
     # ── 창고 탐색 ───────────────────────────────────────────
-    # 1) 카카오 API (실제 모드)
+    # 1) 카카오 API (실시간 검색)
     kakao_results: list[dict] = []
     simulation_mode = True
 
@@ -579,13 +596,20 @@ def recommend_storage(
         if kakao_results:
             simulation_mode = False
 
-    # 2) 시뮬레이션 DB (API 없을 때 또는 보완)
-    sim_results = [
-        wh for wh in SIMULATION_WAREHOUSES
-        if haversine_km(port_lat, port_lng, wh["lat"], wh["lng"]) * 1000 <= search_radius_m
-    ]
+    # 2) NLIC 국가물류통합정보센터 DB (정부 공인 실데이터)
+    nlic_results = _load_nlic_db(port_lat, port_lng, search_radius_m)
+    if nlic_results:
+        simulation_mode = False   # NLIC도 실데이터이므로 시뮬 아님
 
-    raw_pool = (kakao_results + sim_results) if not simulation_mode else sim_results
+    # 3) 폴백: NLIC JSON 없을 때만 기존 시뮬 DB 사용
+    fallback_results: list[dict] = []
+    if not nlic_results:
+        fallback_results = [
+            wh for wh in SIMULATION_WAREHOUSES
+            if haversine_km(port_lat, port_lng, wh["lat"], wh["lng"]) * 1000 <= search_radius_m
+        ]
+
+    raw_pool = kakao_results + nlic_results + fallback_results
 
     # ── 화물 유형 필터 ──────────────────────────────────────
     filtered = filter_by_cargo_type(raw_pool, cargo_type)
