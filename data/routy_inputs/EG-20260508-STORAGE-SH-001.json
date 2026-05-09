@@ -1,0 +1,58 @@
+{
+  "execution_group_id": "EG-20260508-STORAGE-SH-001",
+  "generated_at": "2026-05-08T20:45:36",
+  "phase": "PHASE1_TO_STORAGE",
+  "phase_description": "해상 리스크 발생 → 출발지에서 항만 인근 창고·ODCY로 임시 운송",
+  "risk_context": {
+    "mri_current": 0.72,
+    "delay_reason": "호르무즈 봉쇄",
+    "original_port": "부산항(북항)",
+    "original_pickup": "2026-05-20",
+    "decision": "HOLDBACK_TO_STORAGE"
+  },
+  "shipment": {
+    "shipment_id": "SH-001",
+    "company": "테스트화주",
+    "region": "경기남부",
+    "cargo_type": "일반화물",
+    "cbm": 15.0,
+    "cold_chain": false,
+    "hazmat": false,
+    "origin_address": "경기도 수원시"
+  },
+  "dispatch": {
+    "origin": {
+      "name": "테스트화주 출고지",
+      "address": "경기도 수원시"
+    },
+    "destination": {
+      "name": "테스트창고",
+      "address": "부산시 동구",
+      "phone": "051-000-0000",
+      "type": "ODCY",
+      "lat": null,
+      "lng": null
+    },
+    "adjusted_pickup": "2026-05-19",
+    "action": "DELIVER_TO_STORAGE",
+    "distance_km": 2.5,
+    "duration_min": 8.0,
+    "special_handling": {
+      "cold_chain": false,
+      "hazmat": false,
+      "notes": ""
+    }
+  },
+  "phase2_plan": {
+    "ready_date": "TBD (선적 재개 시 자동 갱신)",
+    "action": "DELIVER_TO_CY",
+    "destination": "부산항(북항)",
+    "note": "선적 일정 확정 후 Phase 2 JSON 자동 생성 예정"
+  },
+  "meta": {
+    "note": "위밋 플랫폼 → 루티 API 입력 스펙 (Phase 1: 창고 임시 보관)",
+    "integration_status": "simulation_mode",
+    "next_step_api": "POST /v1/dispatch/execute",
+    "routy_version": "v1"
+  }
+}

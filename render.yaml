@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: wemeet-api
+    env: python
+    region: singapore   # 한국과 가장 가까운 리전
+    plan: free
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # ── 아래 키들은 render.com 대시보드에서 직접 입력 (이 파일에 값 없음)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: KAKAO_REST_API_KEY
+        sync: false
+      - key: KAKAO_MOBILITY_KEY
+        sync: false
+      - key: ECOS_API_KEY
+        sync: false
+      - key: BPA_API_KEY
+        sync: false

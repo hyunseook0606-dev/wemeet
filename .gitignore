@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# 패키징
+build/
+dist/
+*.egg-info/
+*.egg
+
+# 테스트 / 커버리지
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# 환경 변수 / 시크릿
+.env
+.env.local
+.env.*.local
+*.key
+
+# 데이터 (용량 큼, 별도 관리)
+data/*.csv
+data/*.xlsx
+data/ecos_cache/
+
+# 출력물 (자동 생성)
+routy_inputs/*.json
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 임시 파일
+*.tmp
+*.bak

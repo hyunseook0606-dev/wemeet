@@ -1,0 +1,16 @@
+{
+  "run_at": "2026-05-04 10:52",
+  "mode": "daily",
+  "results": {
+    "환율 (오늘)": {
+      "status": "OK",
+      "detail": "$1 = ₩1,477  [frankfurter]",
+      "time": "10:52:40"
+    },
+    "유가 (오늘)": {
+      "status": "OK",
+      "detail": "Brent $108.20/배럴  [Yahoo]",
+      "time": "10:52:45"
+    }
+  }
+}

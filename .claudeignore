@@ -1,0 +1,43 @@
+# Claude Code 컨텍스트에서 제외할 파일/폴더
+# (CLAUDE.md, PROJECT_SPEC.md, TASKS.md, README.md, src/, tests/만 컨텍스트로 사용)
+
+# 데이터 파일 (용량 크고 컨텍스트 낭비)
+data/*.csv
+data/ecos_cache/
+*.csv
+*.xlsx
+
+# 출력물
+routy_inputs/*.json
+*.log
+
+# Python 임시
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# 환경/시크릿
+.env
+.env.local
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 임시 파일
+.DS_Store
+Thumbs.db
+*.tmp
+
+# 참조 문서 (필요 시 명시적 @reference/... 로 첨부)
+reference/*.docx
+reference/*.pdf

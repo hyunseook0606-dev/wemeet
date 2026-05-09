@@ -1,0 +1,58 @@
+{
+  "execution_group_id": "EG-20260508-STORAGE-SH-011",
+  "generated_at": "2026-05-08T21:27:24",
+  "phase": "PHASE1_TO_STORAGE",
+  "phase_description": "해상 리스크 발생 → 출발지에서 항만 인근 창고·ODCY로 임시 운송",
+  "risk_context": {
+    "mri_current": 0.72,
+    "delay_reason": "해상 리스크 상승 (MRI 기반 HOLDBACK 결정)",
+    "original_port": "부산항(북항)",
+    "original_pickup": "2026-05-11",
+    "decision": "HOLDBACK_TO_STORAGE"
+  },
+  "shipment": {
+    "shipment_id": "SH-011",
+    "company": "화주_K",
+    "region": "경상북부",
+    "cargo_type": "2차전지",
+    "cbm": 13.9,
+    "cold_chain": true,
+    "hazmat": true,
+    "origin_address": "경상북도 구미시 공단동 배터리공장"
+  },
+  "dispatch": {
+    "origin": {
+      "name": "화주_K 출고지",
+      "address": "경상북도 구미시 공단동 배터리공장"
+    },
+    "destination": {
+      "name": "부산항 위험물 보세창고",
+      "address": "부산광역시 중구 중앙동",
+      "phone": "051-XXX-XXXX",
+      "type": "보세창고(위험물)",
+      "lat": null,
+      "lng": null
+    },
+    "adjusted_pickup": "2026-05-10",
+    "action": "DELIVER_TO_STORAGE",
+    "distance_km": 2.5,
+    "duration_min": 6.3,
+    "special_handling": {
+      "cold_chain": true,
+      "hazmat": true,
+      "notes": "화재진압 시스템(스프링클러) + 위험물 인허가 필수. IMDG Class 9 해당."
+    }
+  },
+  "phase2_plan": {
+    "ready_date": "2026-05-25",
+    "action": "DELIVER_TO_CY",
+    "destination": "부산항(북항)",
+    "note": "선적 일정 확정 후 Phase 2 JSON 자동 생성 예정"
+  },
+  "meta": {
+    "note": "위밋 플랫폼 → 루티 API 입력 스펙 (Phase 1: 창고 임시 보관)",
+    "integration_status": "simulation_mode",
+    "next_step_api": "POST /v1/dispatch/execute",
+    "routy_version": "v1"
+  }
+}
