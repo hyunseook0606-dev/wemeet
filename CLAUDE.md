@@ -142,7 +142,7 @@ POST /api/routy/generate          Phase1+2 루티 JSON 생성
 | KCCI 운임지수 | 한국해양진흥공사 | XLS 파일 또는 data.go.kr API |
 | 부산항 물동량 | BPA API (2020~2024) + Excel (2025) | BPA_API_KEY |
 | 해사 뉴스 | RSS (gCaptain, Splash247, 한국해운신문) | feedparser |
-| 창고 탐색 | 카카오 Local API | KAKAO_REST_API_KEY |
+| 창고 탐색 | NLIC 공공DB(439개) → 카카오 Local API → 시뮬DB | KAKAO_REST_API_KEY |
 | 경로 계산 | 카카오모빌리티 | KAKAO_MOBILITY_KEY (=REST 키) |
 | 유가 | Yahoo Finance BZ=F (1순위) → FRED → EIA | 자동 수집 |
 | 환율 | ECOS → frankfurter.app | ECOS_API_KEY |
