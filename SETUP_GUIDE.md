@@ -49,7 +49,7 @@ Copy-Item .env.example .env
 2. 구글 계정 로그인 → "Get API key" → 새 키 생성
 3. `.env`에 `GEMINI_API_KEY=발급받은키` 입력
 
-**카카오** — 창고·ODCY 탐색 + 경로 계산
+**카카오** — 창고 실시간 탐색 + 경로 계산 (없어도 NLIC DB 439개로 작동)
 1. https://developers.kakao.com 접속
 2. 카카오 계정 로그인 → 내 애플리케이션 → 애플리케이션 추가
 3. 앱 이름 입력 → 저장 → 앱 선택 → 앱 키 → **REST API 키** 복사
@@ -97,7 +97,37 @@ uvicorn api:app --reload --port 8000
 
 ---
 
-## 5. 단위 테스트
+## 5. LSTM 캐시 생성 (서버 배포 전 필수)
+
+서버(Render)에는 PyTorch가 없어 실시간 LSTM 학습이 불가합니다.
+로컬에서 미리 학습 결과를 저장해두세요.
+
+```bash
+python scripts/generate_lstm_cache.py
+git add data/lstm_cache.json
+git commit -m "update lstm cache"
+git push
+```
+
+성공 시 Render가 자동 재배포되어 실제 LSTM 결과를 반환합니다.
+
+---
+
+## 6. 창고 DB 업데이트 (선택)
+
+NLIC(국가물류통합정보센터)에서 새 데이터를 받은 경우 재실행:
+
+```bash
+# 새 xls 파일을 프로젝트 루트에 저장 후:
+python scripts/geocode_nlic.py
+git add data/nlic_warehouses.json
+git commit -m "update nlic db"
+git push
+```
+
+---
+
+## 7. 단위 테스트
 
 ```bash
 pytest tests/ -v
@@ -105,9 +135,10 @@ pytest tests/ -v
 
 ---
 
-## 6. Lovable 프론트엔드 연동
+## 8. Lovable 프론트엔드 연동
 
 `Lovable_연동_개발가이드.docx` 참조. FastAPI 백엔드 실행 후 진행합니다.
+Render 배포 방법은 `Render_배포_가이드_친구용.docx` 참조.
 
 ---
 
@@ -116,6 +147,7 @@ pytest tests/ -v
 | 증상 | 해결 |
 |---|---|
 | `ModuleNotFoundError: No module named 'src'` | 노트북 cell[02] 먼저 실행 |
-| LSTM 결과 없음 | `pip install torch` 후 재시작 |
-| 창고 0건 탐색 | 카카오 키 없으면 시뮬 DB 자동 사용 — 정상 |
+| LSTM 결과 없음 | `pip install torch` 후 재시작, 또는 lstm_cache.json 확인 |
+| 창고 0건 탐색 | 카카오 키 없으면 NLIC DB 자동 사용 — 정상 |
 | `FileNotFoundError: data/...png` | ROOT 경로 오류 — `ROOT / 'data' / '...'` 확인 |
+| Render 서버 30초 지연 | 슬립 상태 — /api/health 접속으로 미리 깨우기 |

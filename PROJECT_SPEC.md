@@ -5,7 +5,41 @@
 
 ---
 
-## 1. 시나리오 파라미터 (절대 변경 금지)
+## 핵심 설계 원칙
+
+- **강제 시나리오 없음**: 플랫폼은 화주에게 정보를 '참고'로 제시할 뿐, 행동을 강제하지 않음
+- `build_risk_context()` → 화주 제시용 리스크 맥락 (과거 유사사례 평균 기반)
+- `estimate_impact_advisory()` → 참고 추정값 (확정값 아님, 화주 결정 지원용)
+- `auto_classify_scenario()` / `analyze_impact()` → **Tab4 시뮬레이션 전용**으로만 사용
+
+---
+
+## 0. RiskContext (화주 제시용 리스크 맥락)
+
+```python
+@dataclass
+class RiskContext:
+    mri: float
+    grade: str                   # '정상' / '주의' / '경계' / '위험'
+    grade_color: str
+    top_category: str            # NLP 분류 최다 카테고리
+    current_issue: str           # 뉴스 키워드 기반 한줄 요약
+    top_keywords: list[str]
+    similar_events: list[dict]   # historical_matcher 결과
+    avg_delay_days: float        # 유사사례 평균 지연일 (MRI<0.3 → 0)
+    avg_freight_change_pct: float
+    warehouse_recommended: bool  # MRI >= 0.5
+    advisory_note: str           # 화주 제시 참고 문구
+
+# 생성:
+risk_ctx = build_risk_context(mri, top_category, news_keywords)
+# 참고 추정:
+ia = estimate_impact_advisory(shipment_dict, risk_ctx)  # ImpactAnalysis 반환
+```
+
+---
+
+## 1. 시나리오 파라미터 (Tab4 시뮬레이션 전용)
 
 ### 1.1 시나리오 정의 (Python dict 형식)
 
@@ -79,7 +113,7 @@ SCENARIOS = {
 }
 ```
 
-### 1.2 자동 분류 규칙
+### 1.2 자동 분류 규칙 (Tab4 시뮬레이션 전용 — 화주에게 강제 적용 금지)
 
 ```python
 def auto_classify_scenario(today_mri: float,
