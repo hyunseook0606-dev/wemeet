@@ -1,6 +1,9 @@
 """
-reorganizer.py — 운영 재조정 엔진
-영향 분석 결과 → PRIORITY / HOLDBACK / SHIFT / CONSOLIDATION 4가지 행동 분류.
+reorganizer.py — 운영 재조정 엔진 (미사용 — 참고용 보존)
+
+NOTE: 이 모듈은 현재 플랫폼에서 직접 사용하지 않습니다.
+      루티(ROOUTY)가 자체적으로 공동 집하·배차를 처리합니다.
+      발표 질의응답 대응용으로 코드만 보존합니다.
 """
 from __future__ import annotations
 

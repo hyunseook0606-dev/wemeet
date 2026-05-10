@@ -55,7 +55,6 @@ from src.scenario_engine import (
     auto_classify_scenario, generate_shipments, analyze_all,
     build_risk_context, estimate_impact_advisory,
 )
-from src.reorganizer import reorganize_pickups
 from src.routy_adapter import generate_routy_input, save_routy_json
 from src.llm_reporter import generate_risk_report, estimate_monthly_cost, active_llm_provider
 from src.data_loader import load_kcci
@@ -246,7 +245,7 @@ lstm_insight = _load_lstm_insight()
 # 출하 + 영향 분석
 ship_df   = generate_shipments(n=n_shipments)
 impacts   = analyze_all(ship_df, scenario_id)
-reorg     = reorganize_pickups(ship_df, impacts, scenario)
+reorg     = {'pickup_priority': [], 'pickup_holdback': [], 'pickup_shifted': [], 'consolidation_groups': []}
 routy_out = generate_routy_input(scenario_id, scenario, ship_df, impacts, reorg)
 
 # ── 탭 구성 ───────────────────────────────────────────────────────────────────
