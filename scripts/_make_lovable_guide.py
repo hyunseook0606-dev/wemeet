@@ -156,7 +156,7 @@ r.font.color.rgb = RGBColor(0x2E, 0x75, 0xB6)
 
 doc.add_paragraph()
 p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-p.add_run('작성일: 2026년 5월  |  버전: 2.0  |  대상: 프론트엔드 개발 팀원').font.size = Pt(10)
+p.add_run('작성일: 2026년 5월  |  버전: 3.0  |  대상: 프론트엔드 개발 팀원').font.size = Pt(10)
 
 doc.add_paragraph()
 tip('이 문서는 Lovable, React, API 경험이 전혀 없는 분도 처음부터 따라할 수 있도록 작성되었습니다.')
@@ -370,8 +370,8 @@ code(
     '  "경계" -> orange (#FF7043)\n'
     '  "주의" -> yellow (#FFA726)\n'
     '  "정상" -> green (#66BB6A)\n'
-    '- Text: "주요 리스크: {category}"\n'
-    '- Text: "자동 분류 시나리오: {scenario_name}"\n'
+    '- Text: "주요 뉴스 카테고리: {category}"\n'
+    '- Text: "현재 이슈: {current_issue}"\n'
     '- Show loading spinner while fetching\n\n'
     '2. ACCORDION - MRI란? (Expandable section)\n'
     'Title: "MRI(해상 리스크 지수)란?"\n'
@@ -420,17 +420,20 @@ table(
 )
 
 h2('5-2. 제출 후 표시할 결과')
+warn('아래 수치는 과거 유사사례 평균 기반 "참고 추정값"입니다. 확정값이 아님을 명시해야 합니다.')
 table(
-    ['항목', '표시 내용', '조건'],
+    ['API 필드명', '표시 내용', '비고'],
     [
-        ['예상 운임', '$675 (USD)', '항상'],
-        ['지연 예상', '+14일', '항상'],
-        ['운임 변화', '+$203', '항상'],
-        ['납기 위반 여부', '⚠ 위험 / ✅ 안전', '항상'],
-        ['MRI 맥락', '현재 MRI + 과거 유사사례', '항상'],
-        ['창고 보관 옵션 버튼', '"창고 보관 옵션 보기" 버튼', 'show_warehouse === true 일 때만'],
+        ['estimated_cost', '예상 운임 $675', '항상 표시'],
+        ['estimated_delay_days', '참고 지연 추정 +12일', '과거 유사사례 평균 — 참고용'],
+        ['estimated_cost_delta', '참고 운임 변동 +$248', '과거 유사사례 평균 — 참고용'],
+        ['deadline_at_risk', '납기 주의 ⚠ / 여유 ✅', '항상 표시'],
+        ['current_issue', '현재 이슈 한줄 요약', 'advisory_note와 함께 파란 박스에 표시'],
+        ['similar_events', '유사 과거 사례 목록', '사건명, 지연일, 운임변동 카드'],
+        ['priority_cargo', '우선처리 권고 ⭐', 'true일 때만 표시'],
+        ['warehouse_recommended', '"창고 옵션 보기" 버튼', 'true(MRI>=0.5)일 때만 표시'],
     ],
-    col_widths=[3.5, 4, 5]
+    col_widths=[4, 4, 5.5]
 )
 
 h2('5-3. Lovable 프롬프트')
@@ -454,19 +457,25 @@ code(
     '                deadline_days, region, urgent }\n'
     'pickup_date format: "YYYY-MM-DD"\n\n'
     'Show result card with:\n'
-    '- 4 metric cards: estimated_cost ($), delay_days (+Xd),\n'
-    '  cost_delta ($+/-), deadline_violated (warning/ok)\n'
-    '- MRI context box (blue background):\n'
-    '  "현재 MRI {mri} — {scenario_name}"\n'
-    '- If response.requires_priority === true:\n'
-    '  show info box "⭐ 우선처리 대상"\n'
-    '- If response.requires_holdback === true:\n'
-    '  show warning box "◐ 항만 반입 보류 권고"\n'
-    '- If response.show_warehouse === true:\n'
+    '- 4 metric cards:\n'
+    '  1. estimated_cost -> "예상 운임 $X"\n'
+    '  2. estimated_delay_days -> "참고 지연 추정 +Xd" (add tooltip: 과거 유사사례 평균)\n'
+    '  3. estimated_cost_delta -> "참고 운임 변동 $+/-X"\n'
+    '  4. deadline_at_risk -> "납기 주의 ⚠" or "납기 여유 ✅"\n\n'
+    '- Advisory info box (blue background):\n'
+    '  Title: "현재 해상 리스크 현황"\n'
+    '  Show: "현재 이슈: {current_issue}"\n'
+    '  Show: "{advisory_note}" in smaller gray text\n\n'
+    '- Similar events section (if similar_events.length > 0):\n'
+    '  Title: "과거 유사 사례 (참고)"\n'
+    '  For each event: "{name} ({date 앞 4자리}년) — 지연 {avg_delay_days}일 / 운임 +{avg_freight_increase_pct}%"\n\n'
+    '- If response.priority_cargo === true:\n'
+    '  show info box "⭐ 우선처리 권고 — 콜드체인/위험물 화물"\n'
+    '- If response.warehouse_recommended === true:\n'
     '  show primary button "🏭 창고 보관 옵션 보기"\n'
     '  On click: navigate to /warehouse\n'
     '  Pass as query params: port_name, cargo_type, cbm,\n'
-    '  delay_days, freight_usd=estimated_cost'
+    '  delay_days=estimated_delay_days, freight_usd=estimated_cost'
 )
 
 doc.add_page_break()
