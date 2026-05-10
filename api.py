@@ -32,7 +32,10 @@ import pandas as pd
 from src.config import SCENARIOS, ROUTE_INFO
 from src.nlp_classifier import classify_news_df, top_category
 from src.mri_engine import calc_today_mri, build_mri_series, mri_grade, mri_sub_indices
-from src.scenario_engine import auto_classify_scenario, analyze_impact, ImpactAnalysis
+from src.scenario_engine import (
+    auto_classify_scenario, analyze_impact, ImpactAnalysis,
+    build_risk_context, estimate_impact_advisory,
+)
 from src.historical_matcher import find_similar_events
 from src.odcy_recommender import recommend_storage, CargoType
 from src.option_presenter import generate_four_options
@@ -246,11 +249,15 @@ def get_lstm_forecast():
 @app.post('/api/shipment/register')
 def register_shipment(req: ShipmentRequest):
     """
-    화주 출하 등록 → 현재 시나리오 기반 영향 분석 반환.
+    화주 출하 등록 → 과거 유사사례 + 현재 이슈 기반 참고 정보 반환.
+    강제 시나리오 없음 — 화주가 A/B/C/D 옵션 중 직접 결정합니다.
     """
-    mri_data    = _get_mri_data()
-    scenario_id = auto_classify_scenario(mri_data['mri'], mri_data['category'])
-    scenario    = SCENARIOS[scenario_id]
+    mri_data = _get_mri_data()
+    mri      = mri_data['mri']
+    category = mri_data['category']
+
+    # 리스크 맥락 구성 (과거 유사사례 + 현재 이슈 요약)
+    risk_ctx = build_risk_context(mri, category)
 
     if req.route not in ROUTE_INFO:
         raise HTTPException(400, f'알 수 없는 항로: {req.route}')
@@ -259,21 +266,21 @@ def register_shipment(req: ShipmentRequest):
     est_cost = round((info['usd_per_teu'] / 33) * 1.5 * req.cbm)
 
     ship = {
-        'shipment_id':   f'SH-{datetime.now().strftime("%H%M%S")}',
-        'company':       req.company,
-        'route':         req.route,
-        'cargo_type':    req.cargo_type,
-        'region':        req.region,
-        'pickup_date':   datetime.strptime(req.pickup_date, '%Y-%m-%d'),
-        'cbm':           req.cbm,
-        'deadline_days': req.deadline_days,
-        'urgent':        req.urgent,
+        'shipment_id':    f'SH-{datetime.now().strftime("%H%M%S")}',
+        'company':        req.company,
+        'route':          req.route,
+        'cargo_type':     req.cargo_type,
+        'region':         req.region,
+        'pickup_date':    datetime.strptime(req.pickup_date, '%Y-%m-%d'),
+        'cbm':            req.cbm,
+        'deadline_days':  req.deadline_days,
+        'urgent':         req.urgent,
         'estimated_cost': est_cost,
     }
 
-    ia: ImpactAnalysis = analyze_impact(ship, scenario)
+    # 과거 유사사례 평균값 기반 참고 추정
+    ia = estimate_impact_advisory(ship, risk_ctx)
 
-    # 항로 → 출발 항만
     route_to_port = {
         '부산→로테르담': '부산항(북항)',
         '부산→LA':       '부산항(북항)',
@@ -282,19 +289,25 @@ def register_shipment(req: ShipmentRequest):
         '부산→도쿄':     '부산항(북항)',
     }
     return {
-        'shipment_id':      ship['shipment_id'],
-        'estimated_cost':   est_cost,
-        'delay_days':       ia.delay_days_applied,
-        'cost_delta':       ia.cost_delta,
-        'deadline_violated': ia.deadline_violated,
-        'requires_priority': ia.requires_priority,
-        'requires_holdback': ia.requires_holdback,
-        'reason':            ia.reason,
-        'new_pickup_date':   ia.new_pickup_date.strftime('%Y-%m-%d'),
-        'scenario_id':       scenario_id,
-        'mri':               mri_data['mri'],
-        'departure_port':    route_to_port.get(req.route, '부산항(북항)'),
-        'show_warehouse':    mri_data['mri'] >= 0.5,   # 창고 추천 활성화 여부
+        'shipment_id':    ship['shipment_id'],
+        'estimated_cost': est_cost,
+        # 현재 이슈
+        'current_issue':  risk_ctx.current_issue,
+        'mri':            mri,
+        'grade':          risk_ctx.grade,
+        # 과거 유사사례 참고
+        'similar_events':              risk_ctx.similar_events,
+        'avg_historical_delay_days':   risk_ctx.avg_delay_days,
+        'avg_historical_freight_change_pct': risk_ctx.avg_freight_change_pct,
+        'advisory_note':               risk_ctx.advisory_note,
+        # 이번 출하 참고 추정 (확정값 아님)
+        'estimated_delay_days': ia.delay_days_applied,
+        'estimated_cost_delta': ia.cost_delta,
+        'deadline_at_risk':     ia.deadline_violated,
+        'priority_cargo':       ia.requires_priority,
+        'warehouse_recommended': risk_ctx.warehouse_recommended,
+        'new_pickup_date':      ia.new_pickup_date.strftime('%Y-%m-%d'),
+        'departure_port':       route_to_port.get(req.route, '부산항(북항)'),
     }
 
 

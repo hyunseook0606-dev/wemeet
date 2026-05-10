@@ -1,5 +1,11 @@
 """
-scenario_engine.py — 시나리오 자동 분류기 + 영향 분석 엔진
+scenario_engine.py — 리스크 맥락 제시 엔진 + (시뮬용) 시나리오 분류기
+
+주요 설계 원칙:
+  - 플랫폼은 화주에게 정보를 '제시'할 뿐, 행동을 강제하지 않음
+  - build_risk_context(): 현재 MRI + 과거 유사사례 + 뉴스 이슈 → 참고 정보 반환
+  - estimate_impact_advisory(): 과거 평균값 기반 '참고' 추정 (확정값 아님)
+  - auto_classify_scenario() / analyze_impact(): Tab4 시뮬레이션 전용으로 유지
 """
 from __future__ import annotations
 
@@ -39,11 +45,157 @@ class ImpactAnalysis:
     requires_holdback:   bool
     requires_priority:   bool
     reason:              str
-    sub_scenario_id:     str | None = None   # 세부 시나리오 ID (예: B1_RED_SEA)
-    sub_scenario_name:   str | None = None   # 세부 시나리오 한글명
+    sub_scenario_id:     str | None = None
+    sub_scenario_name:   str | None = None
 
 
-# ── 시나리오 자동 분류기 ──────────────────────────────────────────────────────
+@dataclass
+class RiskContext:
+    """플랫폼이 화주에게 제시하는 리스크 맥락 (강제 시나리오 없음)."""
+    mri:                       float
+    grade:                     str         # '정상' / '주의' / '경계' / '위험'
+    grade_color:               str
+    top_category:              str
+    current_issue:             str         # 현재 이슈 한줄 요약
+    top_keywords:              list[str]
+    similar_events:            list[dict]  # historical_matcher 결과
+    avg_delay_days:            float       # 유사사례 평균 지연일
+    avg_freight_change_pct:    float       # 유사사례 평균 운임 변동률
+    warehouse_recommended:     bool        # MRI >= 0.5 시 True
+    advisory_note:             str         # 화주에게 보여줄 참고 문구
+
+
+# ── 현재 이슈 요약 (뉴스 카테고리 + 키워드 → 한줄 설명) ─────────────────────
+
+_ISSUE_MAP: dict[str, dict[str, str]] = {
+    '지정학분쟁': {
+        'houthi|houthis|suez|홍해|후티|수에즈': '홍해·수에즈 관련 지정학 리스크 상승 중',
+        'hormuz|iran|호르무즈|이란':             '호르무즈 해협 긴장 고조',
+        'tariff|trump|관세|미중|china':          '미중 무역 갈등·관세 불확실성 고조',
+        'default':                               '지정학 분쟁으로 주요 항로 위험 상승',
+    },
+    '기상재해': {
+        'typhoon|storm|태풍|폭풍':               '태풍·기상 악화로 항로 위험 증가',
+        'canal|drought|파나마|수위':              '운하 수위 저하로 통항 제한 가능성',
+        'default':                               '기상 이상으로 해상 운항 지연 위험',
+    },
+    '운임변동': {'default': '해상 운임 급등세 지속 중'},
+    '항만파업':  {'default': '항만 파업·혼잡으로 처리 지연 가능성'},
+    '관세정책':  {'default': '관세·통상 정책 변화로 통관 지연 가능성'},
+    '공급망이슈':{'default': '선복 부족·공급망 차질 우려'},
+    '정상':      {'default': '현재 주요 해상 리스크 없음'},
+}
+
+
+def _summarize_issue(top_category: str, keywords: list[str]) -> str:
+    category_map = _ISSUE_MAP.get(top_category, _ISSUE_MAP['정상'])
+    kw_str = ' '.join(keywords).lower()
+    for pattern, msg in category_map.items():
+        if pattern == 'default':
+            continue
+        if any(p in kw_str for p in pattern.split('|')):
+            return msg
+    return category_map['default']
+
+
+# ── 핵심 공개 함수: 리스크 맥락 구성 ─────────────────────────────────────────
+
+def build_risk_context(
+    mri: float,
+    top_category: str,
+    news_keywords: list[str] | None = None,
+    top_k: int = 3,
+) -> RiskContext:
+    """
+    현재 MRI + 과거 유사사례 + 뉴스 키워드를 종합해
+    화주에게 제시할 리스크 맥락을 반환합니다.
+
+    Parameters
+    ----------
+    mri           : 오늘 MRI 점수 (0~1)
+    top_category  : NLP 분류 최다 카테고리
+    news_keywords : 뉴스에서 감지된 주요 키워드 목록 (선택)
+    top_k         : 유사사례 반환 개수
+    """
+    from src.historical_matcher import find_similar_events
+    from src.mri_engine import mri_grade
+
+    grade_label, grade_color = mri_grade(mri)
+    keywords = news_keywords or []
+
+    cats = [top_category] if top_category and top_category != '정상' else ['지정학분쟁']
+    similar = find_similar_events(mri, cats, top_k=top_k)
+
+    # MRI < 0.3 (정상) 이면 추정 지연·운임 변동 없음
+    if mri < 0.3:
+        avg_delay, avg_freight = 0.0, 0.0
+    else:
+        avg_delay   = round(sum(e['avg_delay_days']           for e in similar) / len(similar), 1) if similar else 0.0
+        avg_freight = round(sum(e['avg_freight_increase_pct'] for e in similar) / len(similar), 1) if similar else 0.0
+
+    issue = _summarize_issue(top_category, keywords)
+
+    if similar:
+        note = (
+            f"과거 유사 {len(similar)}개 사례 기준 평균 지연 {avg_delay}일, "
+            f"운임 +{avg_freight}% 수준이었습니다. (참고용 - 확정값 아님)"
+        )
+    else:
+        note = "유사 과거 사례 데이터가 없습니다."
+
+    return RiskContext(
+        mri=mri,
+        grade=grade_label,
+        grade_color=grade_color,
+        top_category=top_category,
+        current_issue=issue,
+        top_keywords=keywords[:10],
+        similar_events=similar,
+        avg_delay_days=avg_delay,
+        avg_freight_change_pct=avg_freight,
+        warehouse_recommended=mri >= 0.5,
+        advisory_note=note,
+    )
+
+
+def estimate_impact_advisory(shipment: dict, risk_ctx: RiskContext) -> ImpactAnalysis:
+    """
+    과거 유사사례 평균값 기반 '참고' 영향 추정.
+    강제 시나리오 없음 — 화주의 의사결정을 돕기 위한 추정치입니다.
+    """
+    delay      = round(risk_ctx.avg_delay_days)
+    surge_rate = risk_ctx.avg_freight_change_pct / 100.0
+
+    pickup = shipment.get('pickup_date')
+    if isinstance(pickup, str):
+        pickup = datetime.fromisoformat(pickup)
+
+    new_pickup    = pickup + timedelta(days=delay) if delay > 0 else pickup
+    base_cost     = int(shipment.get('estimated_cost', 0))
+    cost_delta    = round(base_cost * surge_rate)
+    deadline_days = int(shipment.get('deadline_days', 30))
+    cargo_type    = shipment.get('cargo_type', '일반화물')
+    urgent        = bool(shipment.get('urgent', False))
+
+    cold_types = {'냉장화물', '냉동화물', '2차전지'}
+
+    return ImpactAnalysis(
+        shipment_id        = shipment.get('shipment_id', ''),
+        is_affected        = delay > 0,
+        delay_days_applied = delay,
+        new_pickup_date    = new_pickup,
+        new_estimated_cost = base_cost + cost_delta,
+        cost_delta         = cost_delta,
+        deadline_violated  = delay > deadline_days,
+        requires_holdback  = risk_ctx.warehouse_recommended,
+        requires_priority  = cargo_type in cold_types or urgent,
+        reason             = risk_ctx.current_issue,
+        sub_scenario_id    = None,
+        sub_scenario_name  = None,
+    )
+
+
+# ── 시나리오 자동 분류기 (Tab4 시뮬레이션 전용) ───────────────────────────────
 
 def auto_classify_scenario(today_mri: float,
                             top_category: str,

@@ -51,7 +51,10 @@ random.seed(42)
 from src.config import SCENARIOS, ROUTE_INFO
 from src.nlp_classifier import classify_news_df, top_category
 from src.mri_engine import calc_today_mri, build_mri_series, mri_grade
-from src.scenario_engine import auto_classify_scenario, generate_shipments, analyze_all
+from src.scenario_engine import (
+    auto_classify_scenario, generate_shipments, analyze_all,
+    build_risk_context, estimate_impact_advisory,
+)
 from src.reorganizer import reorganize_pickups
 from src.routy_adapter import generate_routy_input, save_routy_json
 from src.llm_reporter import generate_risk_report, estimate_monthly_cost, active_llm_provider
@@ -227,7 +230,10 @@ mri_series = np.array(mri_series_list)
 
 today_grade_label, today_color = mri_grade(today_mri)
 
-# 시나리오 결정
+# 리스크 맥락 구성 (화주 제시용 — 강제 시나리오 없음)
+risk_ctx = build_risk_context(today_mri, today_cat)
+
+# Tab4 시뮬레이션 전용 시나리오 (화주에게 강제하지 않음)
 if scenario_override == '자동':
     scenario_id = auto_classify_scenario(today_mri, today_cat)
 else:
@@ -260,8 +266,8 @@ with tab1:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric('MRI 점수', f'{today_mri:.3f}', help='0~1, 높을수록 위험')
     col2.metric('등급', today_grade_label)
-    col3.metric('주요 카테고리', today_cat)
-    col4.metric('자동 분류 시나리오', f'{scenario["icon"]} {scenario_id.split("_")[0]}')
+    col3.metric('주요 뉴스 카테고리', today_cat)
+    col4.metric('현재 이슈', risk_ctx.current_issue, help='뉴스 키워드 기반 자동 요약')
 
     st.markdown('---')
 
@@ -458,53 +464,55 @@ with tab3:
             'estimated_cost': est_cost,
         }
 
-        from src.scenario_engine import analyze_impact
-        ia = analyze_impact(new_ship, scenario)
+        # 과거 유사사례 평균값 기반 참고 추정
+        ia = estimate_impact_advisory(new_ship, risk_ctx)
 
         st.success(f'✅ 등록 완료: {new_ship["shipment_id"]}')
 
-        # ── Step 2: 화주에게 현재 MRI 맥락 제공 ─────────────────────────────
+        # ── Step 2: 현재 이슈 + 과거 유사사례 제시 (강제 아님) ──────────────
         with st.expander(f'📊 현재 해상 리스크 현황 — MRI {today_mri:.3f} [{today_grade_label}]', expanded=True):
             _c1, _c2, _c3 = st.columns(3)
-            _c1.metric('MRI 등급', today_grade_label)
-            _c2.metric('주요 리스크', today_cat)
-            _c3.metric('예상 지연', f'+{scenario["delay_days"]}일')
+            _c1.metric('MRI 등급', risk_ctx.grade)
+            _c2.metric('주요 뉴스 카테고리', today_cat)
+            _c3.metric('현재 이슈', risk_ctx.current_issue)
 
-            _cats2 = [today_cat] if today_cat != '정상' else ['지정학분쟁']
-            _sim2  = find_similar_events(today_mri, _cats2, top_k=2)
-            if _sim2:
-                _avg_d = sum(e['avg_delay_days']           for e in _sim2) / len(_sim2)
-                _avg_f = sum(e['avg_freight_increase_pct'] for e in _sim2) / len(_sim2)
-                st.markdown(
-                    f'**과거 유사 MRI 수준에서의 평균 영향**: '
-                    f'지연 +**{_avg_d:.1f}일**, 운임 +**{_avg_f:.1f}%**'
-                )
-                for _ev in _sim2:
-                    st.caption(f"참고: {_ev['name']} ({_ev['date'][:4]}년) — "
-                               f"지연 {_ev['avg_delay_days']}일, 운임 +{_ev['avg_freight_increase_pct']}%")
+            st.markdown('---')
+            st.markdown(f'**{risk_ctx.advisory_note}**')
+
+            if risk_ctx.similar_events:
+                st.markdown('##### 과거 유사 사례 (참고)')
+                for _ev in risk_ctx.similar_events:
+                    st.caption(
+                        f"📌 {_ev['name']} ({_ev['date'][:4]}년) — "
+                        f"지연 평균 {_ev['avg_delay_days']}일 / "
+                        f"운임 +{_ev['avg_freight_increase_pct']}% / "
+                        f"영향 항로: {', '.join(_ev.get('routes_affected', []))}"
+                    )
 
             if lstm_insight:
-                _avg_vol = sum(lstm_insight['values']) / len(lstm_insight['values'])
+                _avg_vol  = sum(lstm_insight['values']) / len(lstm_insight['values'])
                 _drop_vol = (200.0 - _avg_vol) / 200.0 * 100
                 if _drop_vol > 0:
                     st.caption(f'📈 LSTM 예측: 향후 3개월 부산항 물동량 평년 대비 {_drop_vol:.1f}% 감소 예상')
 
+        # 참고 추정 메트릭 (확정값 아님 명시)
+        st.caption('아래 수치는 과거 유사사례 평균 기반 **참고 추정값**입니다. 최종 판단은 화주님께 있습니다.')
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('예상 운임', f'${est_cost:,}')
-        col2.metric('지연 예상', f'+{ia.delay_days_applied}일')
-        col3.metric('운임 변화', f'${ia.cost_delta:+,}')
-        col4.metric('납기 위반', '⚠️ 위험' if ia.deadline_violated else '✅ 안전')
+        col2.metric('참고 지연 추정', f'+{ia.delay_days_applied}일', help='과거 유사사례 평균')
+        col3.metric('참고 운임 변동', f'${ia.cost_delta:+,}', help='과거 유사사례 평균')
+        col4.metric('납기 위험 여부', '⚠️ 주의' if ia.deadline_violated else '✅ 여유')
 
         if ia.requires_priority:
-            st.info(f'⭐ **우선처리 대상** — {cargo}화물로 자동 우선 분류됩니다.')
+            st.info(f'⭐ **우선처리 권고** — {cargo}화물은 콜드체인·위험물 특성상 우선 처리를 권장합니다.')
         if ia.requires_holdback:
-            st.warning('◐ **항만 반입 보류 권고** — 출항 지연 대비 내륙 보관을 권장합니다.')
+            st.warning('🏭 **창고 임시 보관 검토 권고** — 현재 MRI 수준에서 내륙 보관 옵션을 아래에서 확인하세요.')
 
         st.json({
-            'shipment_id': new_ship['shipment_id'],
-            'action':      'PRIORITY' if ia.requires_priority else ('HOLDBACK' if ia.requires_holdback else 'SHIFT'),
-            'new_pickup':  ia.new_pickup_date.strftime('%Y-%m-%d'),
-            'reason':      ia.reason,
+            'shipment_id':    new_ship['shipment_id'],
+            'current_issue':  risk_ctx.current_issue,
+            'advisory_note':  risk_ctx.advisory_note,
+            'new_pickup_ref': ia.new_pickup_date.strftime('%Y-%m-%d'),
         })
 
         # ── Step 3: MRI 임계값 이상이면 창고·ODCY 추천 + 4가지 옵션 ──────────
