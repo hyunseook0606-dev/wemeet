@@ -170,29 +170,35 @@ export default function LiveMRI() {
                   {data?.grade ?? '—'}
                 </div>
 
-                {/* MRI breakdown bars */}
-                <div className="w-full space-y-3">
+                {/* MRI 5차원 하위 지수 바 (API sub_indices 실값 사용) */}
+                <div className="w-full space-y-2.5">
                   {[
-                    { label: '지정학 리스크 (G)', pct: Math.min((data?.mri ?? 0) * 120, 100) },
-                    { label: '지연 지수 (D)', pct: Math.min((data?.mri ?? 0) * 90, 100) },
-                    { label: '운임 변동 (F)', pct: Math.min((data?.mri ?? 0) * 100, 100) },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div className="flex justify-between text-xs text-slate-500 mb-1">
-                        <span>{item.label}</span>
-                        <span>{item.pct.toFixed(0)}%</span>
+                    { key: 'G', label: 'G · 지정학', w: 0.132 },
+                    { key: 'D', label: 'D · 운항방해', w: 0.132 },
+                    { key: 'F', label: 'F · 운임변동', w: 0.183 },
+                    { key: 'V', label: 'V · 물동량', w: 0.437 },
+                    { key: 'P', label: 'P · 항만통상', w: 0.115 },
+                  ].map((item) => {
+                    const raw = data?.sub_indices?.[item.key] ?? (data?.mri ?? 0)
+                    const pct = Math.round(Math.min(raw * 100, 100))
+                    return (
+                      <div key={item.key}>
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                          <span>{item.label} <span className="text-slate-600">×{item.w}</span></span>
+                          <span>{pct}%</span>
+                        </div>
+                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            whileInView={{ width: `${pct}%` }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 1, delay: 0.2 }}
+                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400"
+                          />
+                        </div>
                       </div>
-                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          whileInView={{ width: `${item.pct}%` }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 1, delay: 0.3 }}
-                          className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

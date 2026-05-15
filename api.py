@@ -61,15 +61,23 @@ _MRI_CACHE:  dict | None         = None
 
 
 def _get_mri_data() -> dict:
-    """MRI 계산 결과 캐시 (1시간 TTL 생략 — 단순화)."""
+    """MRI 계산 결과 캐시 (프로세스 내 1회)."""
     global _NEWS_CACHE, _MRI_CACHE
     if _MRI_CACHE is not None:
         return _MRI_CACHE
+
+    data_source = 'simulation'
+    news_count  = 0
 
     try:
         from src.real_data_fetcher import fetch_maritime_news
         import feedparser  # noqa
         news_df = fetch_maritime_news(max_per_source=10, days_back=7)
+        # 시뮬 소스가 아닌 실제 뉴스 기사 수 확인
+        real_count = int((news_df.get('source', pd.Series(dtype=str)) != 'sim').sum())
+        if real_count > 0:
+            data_source = 'realtime'
+            news_count  = real_count
     except Exception:
         news_df = pd.DataFrame([
             {'title': 'Houthi attack Red Sea blockade', 'text': 'hormuz threat iran', 'source': 'sim'},
@@ -87,11 +95,14 @@ def _get_mri_data() -> dict:
 
     _NEWS_CACHE = news_df
     _MRI_CACHE  = {
-        'mri': round(today, 4),
-        'grade': grade,
-        'color': color,
-        'category': cat,
+        'mri':         round(today, 4),
+        'grade':       grade,
+        'color':       color,
+        'category':    cat,
         'sub_indices': {k: round(v, 4) for k, v in sub.items()},
+        'data_source': data_source,   # 'realtime' | 'simulation'
+        'news_count':  news_count,    # 실뉴스 기사 수 (0이면 시뮬)
+        'kcci_loaded': freight_df is not None,
     }
     return _MRI_CACHE
 
@@ -151,12 +162,17 @@ def health():
 # ── Step 2: MRI 현황 + 과거 유사사례 + LSTM ───────────────────────
 
 @app.get('/api/mri')
-def get_mri():
+def get_mri(refresh: bool = False):
     """
     현재 MRI 점수·등급·카테고리·하위지수 + 과거 유사사례 맥락 반환.
     뉴스 RSS 자동 수집 (feedparser 없으면 시뮬 데이터).
+    ?refresh=true 시 캐시 무효화 후 재수집.
     창고 추천은 MRI 등급에 무관하게 항상 제공 (warehouse_available: true).
     """
+    global _MRI_CACHE, _NEWS_CACHE
+    if refresh:
+        _MRI_CACHE = None
+        _NEWS_CACHE = None
     data = _get_mri_data()
     risk_ctx = build_risk_context(data['mri'], data['category'])
     return {

@@ -837,10 +837,10 @@ export default function Platform() {
                   <ol className="space-y-2 text-sm text-slate-400">
                     {[
                       '화주 정보를 입력하면 현재 MRI 지수와 리스크 등급을 분석합니다',
-                      'MRI ≥ 0.5이면 창고·ODCY 추천이 활성화됩니다',
+                      '창고 추천은 MRI 등급 무관, 모든 고객이 이용 가능합니다',
                       '카카오맵으로 창고 위치를 시각화합니다',
-                      'A/B/C/D 4가지 비용 옵션을 비교할 수 있습니다',
-                      '최종 선택 시 Routy JSON을 자동 생성합니다',
+                      'A/B/C 3가지 시나리오 비용을 비교할 수 있습니다 (원화 기준)',
+                      '최종 선택 시 Phase 1 Routy JSON을 자동 생성합니다',
                     ].map((t, i) => (
                       <li key={i} className="flex gap-2">
                         <span className="text-blue-400 font-bold flex-shrink-0">{i+1}.</span>
