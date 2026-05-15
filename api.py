@@ -2,8 +2,8 @@
 api.py — 위밋모빌리티 플랫폼 FastAPI 백엔드
 실행: uvicorn api:app --reload --port 8000
 
-Lovable 프론트엔드가 호출하는 REST API 엔드포인트 모음.
-CORS 허용 설정 포함 (Lovable 도메인에서 호출 가능).
+React 프론트엔드가 호출하는 REST API 엔드포인트 모음.
+CORS 허용 설정 포함.
 """
 from __future__ import annotations
 
@@ -44,13 +44,13 @@ from src.data_loader import load_kcci
 app = FastAPI(
     title='위밋모빌리티 해상 리스크 플랫폼 API',
     version='1.0.0',
-    description='Lovable 프론트엔드 연동용 REST API',
+    description='위밋모빌리티 × KMI 해상 리스크 플랫폼 REST API',
 )
 
-# ── CORS — Lovable 프리뷰 도메인 허용 ──────────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],   # 배포 시 Lovable 실제 도메인으로 제한 권장
+    allow_origins=['*'],
     allow_methods=['*'],
     allow_headers=['*'],
 )

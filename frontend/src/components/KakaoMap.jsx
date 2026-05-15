@@ -155,7 +155,7 @@ export default function KakaoMap({ warehouses = [], selectedIndex = 0, onSelect 
     const errMsg = mapError === 'key'
       ? 'VITE_KAKAO_JS_KEY 환경변수 미설정'
       : mapError === 'sdk'
-      ? 'Kakao SDK 로드 실패 — 도메인(localhost:3000) 등록 확인'
+      ? `Kakao SDK 로드 실패 — 카카오 콘솔에서 현재 도메인(${window.location.hostname}) 등록 확인`
       : 'VITE_KAKAO_JS_KEY 설정을 확인해주세요.'
     return (
       <div className="w-full h-full rounded-xl bg-[#0D1627] border border-white/10 flex flex-col items-center justify-center gap-3 p-6">
