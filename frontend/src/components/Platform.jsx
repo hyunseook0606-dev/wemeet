@@ -309,30 +309,26 @@ function AnalysisResult({ shipmentResult, onWarehouseResult, portName, setPortNa
         </div>
       )}
 
-      {/* 창고 추천 — MRI 주의 등급(0.3) 이상 시 표시 */}
-      {((shipmentResult.mri ?? 0) >= 0.3) && (
-        <>
-          <div className="flex flex-col gap-2">
-            <label className="text-slate-400 text-xs font-medium">출발 항구</label>
-            <select
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50"
-              value={portName} onChange={e => setPortName(e.target.value)}
-            >
-              {PORT_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button
-            onClick={requestWarehouse}
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />창고 탐색 중...</>
-            ) : '📦 창고 추천 + 카카오맵 보기 →'}
-          </button>
-        </>
-      )}
+      {/* 창고 추천 — MRI 등급 무관하게 모든 화주에게 제공 */}
+      <div className="flex flex-col gap-2">
+        <label className="text-slate-400 text-xs font-medium">출발 항구</label>
+        <select
+          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500/50"
+          value={portName} onChange={e => setPortName(e.target.value)}
+        >
+          {PORT_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      <button
+        onClick={requestWarehouse}
+        disabled={loading}
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {loading ? (
+          <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />창고 탐색 중...</>
+        ) : '📦 창고 추천 + 비용 비교 보기 →'}
+      </button>
     </div>
   )
 }
@@ -444,17 +440,18 @@ function JointLogisticsPanel({ shipmentResult }) {
   )
 }
 
-// Step 3: 창고 + 지도 + 4가지 옵션
+// Step 3: 창고 + 지도 + A/B/C 시나리오 비용 비교
 function WarehouseResult({ warehouseData, shipmentResult }) {
   const [selectedWH, setSelectedWH] = useState(0)
-  const [selectedOption, setSelectedOption] = useState('D')
+  const [selectedOption, setSelectedOption] = useState('C')
 
   const warehouses = warehouseData.warehouses || []
-  const options = warehouseData.options || []
+  // API가 반환하는 scenarios (label/name/storage_krw/transfer_krw/total_krw/recommend)
+  const scenarios = warehouseData.scenarios || []
 
   return (
     <div className="space-y-5">
-      <h3 className="text-white font-semibold">Step 3 · 창고 추천 + 4가지 옵션</h3>
+      <h3 className="text-white font-semibold">Step 3 · 창고 추천 + A/B/C 시나리오</h3>
 
       {/* 카카오맵 */}
       <div style={{ height: '280px' }}>
@@ -512,18 +509,19 @@ function WarehouseResult({ warehouseData, shipmentResult }) {
         ))}
       </div>
 
-      {/* 4가지 옵션 */}
-      {options.length > 0 && (
+      {/* A/B/C 시나리오 비용 비교 */}
+      {scenarios.length > 0 && (
         <div className="space-y-3">
-          <h4 className="text-white font-medium text-sm">A/B/C/D 대응 옵션 비교</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {options.map((opt) => {
-              const color = OPTION_COLORS[opt.id] || '#94A3B8'
-              const isSelected = selectedOption === opt.id
+          <h4 className="text-white font-medium text-sm">A/B/C 시나리오 비용 비교</h4>
+          <div className="grid grid-cols-3 gap-2">
+            {scenarios.map((sc) => {
+              const LABEL_COLORS = { A: '#F59E0B', B: '#EF4444', C: '#10B981' }
+              const color = LABEL_COLORS[sc.label] || '#94A3B8'
+              const isSelected = selectedOption === sc.label
               return (
                 <button
-                  key={opt.id}
-                  onClick={() => setSelectedOption(opt.id)}
+                  key={sc.label}
+                  onClick={() => setSelectedOption(sc.label)}
                   className="text-left p-3 rounded-xl border transition-all"
                   style={{
                     background: isSelected ? `${color}15` : 'rgba(255,255,255,0.03)',
@@ -532,42 +530,42 @@ function WarehouseResult({ warehouseData, shipmentResult }) {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: color, color: '#fff' }}>
-                      {opt.id}
+                      {sc.label}
                     </span>
-                    {opt.recommended && (
-                      <span className="text-xs text-green-400">추천</span>
+                    {sc.recommend && (
+                      <span className="text-xs text-green-400">★추천</span>
                     )}
                   </div>
-                  <div className="text-white text-xs font-medium">{opt.name}</div>
-                  <div className="text-slate-500 text-xs mt-0.5">${opt.total_usd?.toLocaleString()}</div>
-                  {opt.savings_usd > 0 && (
-                    <div className="text-green-400 text-xs">${opt.savings_usd?.toLocaleString()} 절감</div>
-                  )}
+                  <div className="text-white text-xs font-medium leading-tight">{sc.name}</div>
+                  <div className="text-slate-300 text-xs mt-1 font-semibold">{sc.total_krw?.toLocaleString()}원</div>
+                  <div className="text-slate-500 text-xs">보관 {sc.storage_krw?.toLocaleString()}원</div>
                 </button>
               )
             })}
           </div>
 
-          {/* 선택된 옵션 상세 */}
+          {/* 선택된 시나리오 상세 */}
           {(() => {
-            const opt = options.find(o => o.id === selectedOption)
-            if (!opt) return null
+            const sc = scenarios.find(s => s.label === selectedOption)
+            if (!sc) return null
             return (
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-xs space-y-2">
-                <div className="font-semibold text-white">{opt.name} 비용 내역</div>
-                {Object.entries(opt.breakdown || {}).map(([k, v]) => (
-                  <div key={k} className="flex justify-between text-slate-400">
-                    <span>{{
-                      freight: '해상운임', routy_p1: 'Routy P1', routy_p2: 'Routy P2',
-                      rental: '창고임대', contract: '계약비용', risk: '리스크 패널티'
-                    }[k] || k}</span>
-                    <span className="text-white">${v?.toLocaleString()}</span>
-                  </div>
-                ))}
+                <div className="font-semibold text-white">{sc.label}안 · {sc.name}</div>
+                <div className="flex justify-between text-slate-400">
+                  <span>보관료</span>
+                  <span className="text-white">{sc.storage_krw?.toLocaleString()}원</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>이송비</span>
+                  <span className="text-white">{sc.transfer_krw?.toLocaleString()}원</span>
+                </div>
                 <div className="border-t border-white/10 pt-2 flex justify-between font-bold text-white">
                   <span>합계</span>
-                  <span className="text-gradient">${opt.total_usd?.toLocaleString()}</span>
+                  <span className="text-green-400">{sc.total_krw?.toLocaleString()}원</span>
                 </div>
+                {sc.note && (
+                  <div className="text-slate-500 text-xs pt-1">{sc.note}</div>
+                )}
               </div>
             )
           })()}
@@ -659,7 +657,7 @@ function RoutyPanel({ shipmentResult, warehouseResult, formData, portName }) {
           </div>
           <button onClick={download}
             className="w-full py-3 rounded-xl border border-green-500/40 text-green-400 text-sm hover:bg-green-500/10 transition-all">
-            📥 JSON 다운로드 (Phase 1+2)
+            📥 JSON 다운로드 (Phase 1 — 출발지→창고)
           </button>
         </>
       ) : (
