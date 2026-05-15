@@ -287,8 +287,12 @@ def register_shipment(req: ShipmentRequest):
     return {
         'shipment_id':    ship['shipment_id'],
         'estimated_cost': est_cost,
+        'cargo_type':     req.cargo_type,
+        'cbm':            req.cbm,
+        'region':         req.region,
         # 현재 이슈
         'current_issue':  risk_ctx.current_issue,
+        'top_keywords':   risk_ctx.top_keywords,
         'mri':            mri,
         'grade':          risk_ctx.grade,
         # 과거 유사사례 참고
@@ -339,17 +343,20 @@ def warehouse_recommend(req: WarehouseRequest):
     return {
         'warehouses': [
             {
-                'id':            w.get('id', ''),
-                'name':          w.get('name', ''),
-                'address':       w.get('address', ''),
-                'phone':         w.get('phone', '전화 문의'),
-                'type':          w.get('type', '창고'),
-                'bonded':        w.get('bonded'),
-                'cold_chain':    w.get('cold_chain'),
-                'distance_km':   w.get('distance_km'),
-                'duration_min':  w.get('duration_min'),
+                'id':             w.get('id', ''),
+                'name':           w.get('name', ''),
+                'address':        w.get('address', ''),
+                'phone':          w.get('phone', '전화 문의'),
+                'type':           w.get('type', '창고'),
+                'bonded':         w.get('bonded'),
+                'cold_chain':     w.get('cold_chain'),
+                'hazmat_license': w.get('hazmat_license'),
+                'area_sqm':       w.get('area_sqm'),
+                'source':         w.get('source', 'NLIC'),
+                'distance_km':    w.get('distance_km'),
+                'duration_min':   w.get('duration_min'),
                 'operating_hours': w.get('operating_hours', ''),
-                'note': '보관료는 직접 전화 문의 후 아래 calc_cost API로 계산하세요.',
+                'notes':          w.get('notes') or w.get('special_notes', ''),
             }
             for w in warehouses
         ],

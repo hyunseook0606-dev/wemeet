@@ -3,16 +3,16 @@ import { motion } from 'framer-motion'
 import { api } from '../hooks/useApi'
 
 const MRI_GRADES = [
-  { grade: '위험', range: '0.8 이상', color: '#EF4444', min: 0.8, max: 1.01, icon: '🔴' },
-  { grade: '경계', range: '0.6 ~ 0.8', color: '#F97316', min: 0.6, max: 0.8, icon: '🟠' },
-  { grade: '주의', range: '0.3 ~ 0.6', color: '#EAB308', min: 0.3, max: 0.6, icon: '🟡' },
-  { grade: '정상', range: '0.3 미만', color: '#22C55E', min: 0.0, max: 0.3, icon: '🟢' },
+  { grade: '위험', range: '0.55 이상', color: '#EF4444', min: 0.55, max: 1.01, icon: '🔴' },
+  { grade: '경계', range: '0.43 ~ 0.55', color: '#F97316', min: 0.43, max: 0.55, icon: '🟠' },
+  { grade: '주의', range: '0.33 ~ 0.43', color: '#EAB308', min: 0.33, max: 0.43, icon: '🟡' },
+  { grade: '정상', range: '0.33 미만', color: '#22C55E', min: 0.0, max: 0.33, icon: '🟢' },
 ]
 
 function getMRIColor(mri) {
-  if (mri >= 0.8) return '#EF4444'
-  if (mri >= 0.6) return '#F97316'
-  if (mri >= 0.3) return '#EAB308'
+  if (mri >= 0.55) return '#EF4444'
+  if (mri >= 0.43) return '#F97316'
+  if (mri >= 0.33) return '#EAB308'
   return '#22C55E'
 }
 
@@ -26,7 +26,7 @@ function MRIGauge({ value }) {
   const arcLen = circumference * 0.75
   const offset = arcLen - (value / 1) * arcLen
 
-  const color = value >= 0.7 ? '#EF4444' : value >= 0.5 ? '#F97316' : value >= 0.3 ? '#EAB308' : '#22C55E'
+  const color = value >= 0.55 ? '#EF4444' : value >= 0.43 ? '#F97316' : value >= 0.33 ? '#EAB308' : '#22C55E'
 
   return (
     <svg width={r * 2} height={r * 2} className="overflow-visible">

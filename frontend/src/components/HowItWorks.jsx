@@ -26,12 +26,12 @@ const steps = [
           d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     ),
-    detail: ['실시간 RSS 뉴스 NLP 분석', 'AHP 5개 지표 가중 산출', 'LSTM 물동량 3개월 예측'],
+    detail: ['실시간 RSS 뉴스 NLP 분석', '하이브리드 엔트로피 5차원 가중 산출', 'LSTM 물동량 3개월 예측'],
   },
   {
     step: '03',
     title: '리스크 등급 & 옵션 추천',
-    desc: 'MRI 등급(정상/주의/경계/위험)에 따라 과거 유사사례와 현재 이슈를 분석하고, A/B/C/D 4가지 대응 옵션과 창고·ODCY 추천을 제공합니다.',
+    desc: 'MRI 등급(정상/주의/경계/위험)에 따라 과거 유사사례와 현재 이슈를 분석하고, A/B/C 3가지 보관 시나리오 비용과 창고·ODCY 추천을 제공합니다.',
     color: '#8B5CF6',
     icon: (
       <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -39,12 +39,12 @@ const steps = [
           d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
     ),
-    detail: ['MRI 4단계 등급 자동 판정', 'A/B/C/D 4가지 대응 옵션', '최적 창고·ODCY 자동 추천'],
+    detail: ['MRI 4단계 등급 자동 판정', 'A/B/C 3가지 보관 시나리오 비용 비교', '최적 창고·ODCY 자동 추천'],
   },
   {
     step: '04',
     title: 'Routy JSON 자동 생성',
-    desc: '선택한 옵션을 기반으로 루티(ROOUTY) 배차 시스템과 호환되는 JSON을 자동 생성해 즉시 실행됩니다.',
+    desc: 'Phase 1(출발지→보세창고) 운송 지시 JSON을 자동 생성합니다. Phase 2는 화주가 선적 재개 시점을 직접 결정 후 별도 요청합니다.',
     color: '#10B981',
     icon: (
       <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -52,7 +52,7 @@ const steps = [
           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
-    detail: ['Phase1 + Phase2 JSON 생성', '루티 배차 API 즉시 연동', '공동물류 그룹 자동 편성'],
+    detail: ['Phase 1 JSON 생성 (출발지→창고)', '루티 배차 API 즉시 연동', '공동물류 그룹 자동 편성'],
   },
 ]
 

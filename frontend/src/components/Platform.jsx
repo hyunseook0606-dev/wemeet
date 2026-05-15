@@ -171,7 +171,7 @@ function AnalysisResult({ shipmentResult, onWarehouseResult, portName, setPortNa
   const [lstmForecast, setLstmForecast] = useState(null)
 
   const mri = shipmentResult.mri ?? 0
-  const gradeColor = mri >= 0.7 ? '#EF4444' : mri >= 0.5 ? '#F97316' : mri >= 0.3 ? '#EAB308' : '#22C55E'
+  const gradeColor = mri >= 0.55 ? '#EF4444' : mri >= 0.43 ? '#F97316' : mri >= 0.33 ? '#EAB308' : '#22C55E'
 
   useEffect(() => {
     api.get('/mri/similar-events').then(r => setSimilarEvents(r.data)).catch(() => {})
@@ -189,7 +189,7 @@ function AnalysisResult({ shipmentResult, onWarehouseResult, portName, setPortNa
         mri_score: shipmentResult.mri,
         delay_days: shipmentResult.estimated_delay_days || 14,
         freight_usd: shipmentResult.estimated_cost,
-        region: shipmentResult?.region || formData?.region || '경기남부',
+        region: shipmentResult?.region || '경기남부',
       }, { timeout: 120000 })
       onWarehouseResult(res.data)
     } catch (err) {
@@ -609,7 +609,6 @@ function RoutyPanel({ shipmentResult, warehouseResult, formData, portName }) {
         warehouse_km: wh.distance_km || 0,
         warehouse_minutes: wh.duration_min || 0,
         warehouse_hours: wh.operating_hours || '',
-        phase2_ready_date: null,
       })
       setRoutyJson(res.data)
     } catch (err) {
