@@ -140,56 +140,43 @@ result = check('유사사례매칭', test_matcher)
 if result:
     print(f'  매칭 {result[0]}건, 카테고리일치 {result[1]}건')
 
-# ── 6. ODCY 추천 + 카카오 API ────────────────────────────────
-print('\n[6] ODCY 추천 (카카오 API)')
-from src.odcy_recommender import recommend_storage, CargoType
-
-kakao_key = os.getenv('KAKAO_REST_API_KEY', '')
-mobi_key  = os.getenv('KAKAO_MOBILITY_KEY', '')
+# ── 6. 창고 추천 (거리 기반 5곳) ───────────────────────────────
+print('\n[6] 창고 추천 (거리 기반 5곳)')
+from src.odcy_recommender import recommend_nearest_five, CargoType, PORT_COORDINATES
 
 def test_odcy():
-    r = recommend_storage(
-        '부산항(북항)', CargoType.GENERAL, top_n=3,
-        kakao_rest_key=kakao_key, kakao_mobility_key=mobi_key,
-    )
-    mode = 'kakao실데이터' if not r['simulation_mode'] else '시뮬DB'
-    recs = r['recommendations']['comprehensive']
-    assert len(recs) >= 1
-    w = recs[0]
-    assert w['distance_km'] is not None
-    return mode, recs[0]['name'], recs[0]['distance_km']
+    dest_lat, dest_lng = PORT_COORDINATES['부산항(북항)']
+    whs = recommend_nearest_five(dest_lat=dest_lat, dest_lng=dest_lng,
+                                  cargo_type=CargoType.GENERAL, top_n=5)
+    assert len(whs) >= 1
+    assert whs[0]['distance_km'] is not None
+    return len(whs), whs[0]['name'], whs[0]['distance_km']
 
-result = check('ODCY추천', test_odcy)
+result = check('창고5곳추천', test_odcy)
 if result:
-    print(f'  모드: {result[0]} | 1위: {result[1]} ({result[2]}km)')
+    print(f'  추천 {result[0]}곳 | 1위: {result[1]} ({result[2]}km)')
 
-# ── 7. 4가지 옵션 비교 ──────────────────────────────────────
-print('\n[7] 4가지 옵션 비교')
-from src.option_presenter import generate_four_options, format_option_table, format_option_detail
+# ── 7. 시나리오 A/B/C 비용 비교 ──────────────────────────────
+print('\n[7] 시나리오 A/B/C 비용 비교')
+from src.scenario_cost import calc_scenarios
 
-def test_options():
-    r = recommend_storage('부산항(북항)', CargoType.GENERAL, top_n=3,
-                          kakao_rest_key=kakao_key, kakao_mobility_key=mobi_key)
-    shipment = {'cargo_type': '일반화물', 'cbm': 15.0, 'region': '경기남부'}
-    opts = generate_four_options(shipment, r, delay_days=14, freight_usd=675)
-    assert len(opts) == 4
-    assert opts[0].option_id == 'A'
-    assert opts[3].option_id == 'D'
-    for opt in opts[1:]:
-        assert opt.total_usd > 0
-    table = format_option_table(opts)
-    detail = format_option_detail(opts[3], opts[0])
-    assert 'D안' in table and '권장' in table
-    savings = [o.savings_vs(opts[0]) for o in opts]
-    return opts[3].total_usd, opts[0].total_usd, savings[3]
+def test_scenarios():
+    scenarios = calc_scenarios(cbm=15.0, delay_days=14)
+    assert len(scenarios) == 3
+    assert scenarios[0].label == 'A'
+    assert scenarios[2].label == 'C'
+    assert scenarios[2].recommend is True
+    # C안이 A안보다 저렴해야 함
+    assert scenarios[2].total_krw < scenarios[0].total_krw
+    return scenarios[0].total_krw, scenarios[1].total_krw, scenarios[2].total_krw
 
-result = check('4가지옵션', test_options)
+result = check('시나리오A/B/C', test_scenarios)
 if result:
-    print(f'  A안: ${result[1]:,.0f} / D안: ${result[0]:,.0f} / 절약: ${result[2]:+,.0f}')
+    print(f'  A안: {result[0]:,}원 / B안: {result[1]:,}원 / C안: {result[2]:,}원')
 
-# ── 8. Phase 1/2 루티 JSON ──────────────────────────────────
-print('\n[8] Phase 1/2 루티 JSON')
-from src.storage_routy_adapter import generate_storage_routy_json, generate_phase2_routy_json, save_storage_json
+# ── 8. Phase 1 루티 JSON ─────────────────────────────────────
+print('\n[8] Phase 1 루티 JSON (출발지→보세창고)')
+from src.storage_routy_adapter import generate_storage_routy_json, save_storage_json
 
 def test_storage_routy():
     wh = {'name': '테스트창고', 'address': '부산시 동구', 'phone': '051-000-0000',
@@ -198,19 +185,17 @@ def test_storage_routy():
         shipment_id='SH-001', company='테스트화주', region='경기남부',
         cargo_type='일반화물', cbm=15.0, cold_chain=False, hazmat=False,
         origin_address='경기도 수원시', original_port='부산항(북항)',
-        original_pickup_date='2026-05-20', mri_current=0.72,
-        delay_reason='호르무즈 봉쇄', recommended_warehouse=wh,
+        original_pickup_date='2026-05-20', mri_current=0.39,
+        delay_reason='홍해 위기', recommended_warehouse=wh,
     )
     assert p1['phase'] == 'PHASE1_TO_STORAGE'
-    p2 = generate_phase2_routy_json(p1, cy_address='부산 신항 CY', cy_closing_date='2026-06-05')
-    assert p2['phase'] == 'PHASE2_TO_CY'
     saved = save_storage_json(p1, DATA_DIR / 'routy_inputs')
     assert saved.exists()
     return 'OK'
 
-result = check('Phase1/2루티JSON', test_storage_routy)
+result = check('Phase1루티JSON', test_storage_routy)
 if result:
-    print(f'  Phase1→Phase2 생성 + 파일 저장 완료')
+    print(f'  Phase 1 JSON 생성 + 저장 완료')
 
 # ── 9. LLM 리포터 ───────────────────────────────────────────
 print('\n[9] LLM 리포터')

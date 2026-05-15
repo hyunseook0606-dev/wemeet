@@ -62,7 +62,12 @@ HISTORICAL_EVENTS: list[HistoricalEvent] = [
         avg_freight_increase_pct=34,
         routes_affected=["아시아-유럽", "아시아-지중해", "아시아-미주 동부"],
         resolution="6일 만에 운하 통항 재개. 적체 선박 해소까지 약 3~4주 추가 소요.",
-        source="Allianz AGCS 2021 Safety & Shipping Review"
+        source=(
+            "Port Economics, Management and Policy (2021). Suez Canal Blockage. "
+            "https://porteconomicsmanagement.org/pemp/contents/part10/port-resilience/suez-canal-blockage-2021/ | "
+            "Project44 (2021). Economic Impact of Suez Canal Blockage. "
+            "https://www.project44.com/blog/economic-impact-suez-canal-blockage/"
+        )
     ),
     HistoricalEvent(
         id="HE002",
@@ -75,13 +80,19 @@ HISTORICAL_EVENTS: list[HistoricalEvent] = [
         cause=(
             "예멘 후티 반군이 홍해·아덴만을 통과하는 상선을 지속 공격. "
             "MSC, Maersk, CMA CGM 등 주요 선사들이 수에즈 경유 항로를 포기하고 "
-            "케이프타운 우회 항로로 전환. 항해 거리 약 3,500해리 증가."
+            "케이프타운 우회 항로로 전환. 항해 거리 약 3,500해리 증가. "
+            "2024년 1분기 수에즈 운하 컨테이너 통항 최대 90% 급감(UNCTAD 2024)."
         ),
         avg_delay_days=12,
-        avg_freight_increase_pct=22,
+        avg_freight_increase_pct=141,
         routes_affected=["아시아-유럽", "아시아-지중해", "아시아-미주 동부"],
         resolution="케이프타운 우회 항로가 사실상 표준화됨. 운임은 고점 대비 부분 안정화.",
-        source="Drewry World Container Index / KCCI 2024"
+        source=(
+            "World Bank (2024). The Deepening Red Sea Shipping Crisis. "
+            "https://documents1.worldbank.org/curated/en/099253002102539789/pdf/IDU10b8b59671dbc814cfc19c4a1299ff54854ba.pdf | "
+            "UNCTAD (2024). Navigating Troubled Waters. "
+            "https://unctad.org/publication/navigating-troubled-waters-impact-global-trade-disruption-shipping-routes-red-sea-black"
+        )
     ),
     HistoricalEvent(
         id="HE003",
@@ -116,10 +127,15 @@ HISTORICAL_EVENTS: list[HistoricalEvent] = [
             "부산항을 포함한 아시아 주요 항만 처리량 30~50% 감소."
         ),
         avg_delay_days=21,
-        avg_freight_increase_pct=85,
+        avg_freight_increase_pct=400,
         routes_affected=["전 노선"],
         resolution="백신 보급 및 항만 운영 점진적 정상화 (2022년 하반기 완료).",
-        source="UNCTAD 2021~2022 / 한국해양수산개발원(KMI)"
+        source=(
+            "UNCTAD (2021). Container Shipping in Times of COVID-19. "
+            "https://unctad.org/publication/container-shipping-times-covid-19-why-freight-rates-have-surged-and-implications-policy | "
+            "UNCTAD (2021). Review of Maritime Transport 2021, Chapter 3. "
+            "https://unctad.org/system/files/official-document/rmt2021ch3_en.pdf"
+        )
     ),
     HistoricalEvent(
         id="HE005",

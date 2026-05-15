@@ -34,8 +34,7 @@ def generate_storage_routy_json(
     original_pickup_date: str,     # YYYY-MM-DD
     mri_current: float,
     delay_reason: str,
-    recommended_warehouse: dict,   # odcy_recommender.recommend_storage() 종합추천 1위
-    phase2_ready_date: Optional[str] = None,  # 선적 재개 예정일 (없으면 미정)
+    recommended_warehouse: dict,   # odcy_recommender.recommend_nearest_five() 결과 중 선택
 ) -> dict:
     """
     화주 화물을 추천 창고까지 운송하는 루티 Phase 1 JSON을 생성합니다.
@@ -107,75 +106,11 @@ def generate_storage_routy_json(
             },
         },
 
-        "phase2_plan": {
-            "ready_date":   phase2_ready_date or "TBD (선적 재개 시 자동 갱신)",
-            "action":       "DELIVER_TO_CY",
-            "destination":  original_port,
-            "note":         "선적 일정 확정 후 Phase 2 JSON 자동 생성 예정",
-        },
-
         "meta": {
-            "note":               "위밋 플랫폼 → 루티 API 입력 스펙 (Phase 1: 창고 임시 보관)",
+            "note":               "위밋 플랫폼 → 루티 API 입력 스펙 (출발지 → 보세창고 임시 보관)",
             "integration_status": "simulation_mode",
             "next_step_api":      "POST /v1/dispatch/execute",
             "routy_version":      "v1",
-        },
-    }
-
-
-# ──────────────────────────────────────────────────────────
-# 2. 루티 Phase 2 JSON 생성 (창고 → CY, 선적 재개 시)
-# ──────────────────────────────────────────────────────────
-
-def generate_phase2_routy_json(
-    phase1_json: dict,
-    cy_address: str,
-    cy_closing_date: str,     # CY Cut — 출항 2~3일 전
-) -> dict:
-    """
-    선적이 재개될 때 창고에서 CY로 운송하는 Phase 2 JSON을 생성합니다.
-    Phase 1 JSON을 입력받아 자동으로 방향을 역전합니다.
-    """
-    now = datetime.now()
-    p1 = phase1_json
-    ship = p1["shipment"]
-    dest = p1["dispatch"]["destination"]
-    eg_id = p1["execution_group_id"].replace("STORAGE", "PHASE2")
-
-    return {
-        "execution_group_id": eg_id,
-        "generated_at":       now.isoformat(timespec="seconds"),
-        "phase":              "PHASE2_TO_CY",
-        "phase_description":  "선적 재개 → 임시 창고에서 CY로 운송 (출항 준비)",
-
-        "risk_context": {
-            **p1["risk_context"],
-            "phase2_triggered": now.strftime("%Y-%m-%d"),
-            "cy_closing_date":  cy_closing_date,
-        },
-
-        "shipment": ship,
-
-        "dispatch": {
-            "origin": {
-                "name":    dest["name"],
-                "address": dest["address"],
-                "phone":   dest["phone"],
-            },
-            "destination": {
-                "name":    f"{p1['risk_context']['original_port']} CY",
-                "address": cy_address,
-            },
-            "adjusted_pickup":   cy_closing_date,
-            "action":            "DELIVER_TO_CY",
-            "special_handling":  p1["dispatch"]["special_handling"],
-        },
-
-        "meta": {
-            "note":               "위밋 플랫폼 → 루티 API 입력 스펙 (Phase 2: CY 반입)",
-            "integration_status": "simulation_mode",
-            "next_step_api":      "POST /v1/dispatch/execute",
-            "phase1_ref":         p1["execution_group_id"],
         },
     }
 

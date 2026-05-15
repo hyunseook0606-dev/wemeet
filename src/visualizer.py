@@ -48,9 +48,9 @@ def plot_mri_series(mri_df: pd.DataFrame, today_mri: float | None = None) -> Non
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.plot(mri_df['date'], mri_df['mri'], color='#1F4E79', linewidth=2)
     ax.fill_between(mri_df['date'], 0, mri_df['mri'], alpha=0.3, color='#1F4E79')
-    ax.axhline(0.8, color='#EF5350', linestyle='--', alpha=0.5, label='위험')
-    ax.axhline(0.6, color='#FF7043', linestyle='--', alpha=0.5, label='경계')
-    ax.axhline(0.3, color='#FFA726', linestyle='--', alpha=0.5, label='주의')
+    ax.axhline(0.55, color='#EF5350', linestyle='--', alpha=0.5, label='위험(0.55)')
+    ax.axhline(0.43, color='#FF7043', linestyle='--', alpha=0.5, label='경계(0.43)')
+    ax.axhline(0.33, color='#FFA726', linestyle='--', alpha=0.5, label='주의(0.33)')
     if today_mri is not None:
         ax.axhline(today_mri, color='#1565C0', linewidth=2,
                    linestyle='-', label=f'오늘 MRI={today_mri:.3f}')
@@ -163,7 +163,7 @@ def print_nlp_summary(news_df: pd.DataFrame) -> None:
     print('=' * 55)
     for _, row in news_df.iterrows():
         w = row.get('risk_weight', 0)
-        icon = '🔴' if w >= 0.8 else ('🟠' if w >= 0.6 else ('🟡' if w >= 0.4 else '🟢'))
+        icon = '🔴' if w >= 0.55 else ('🟠' if w >= 0.43 else ('🟡' if w >= 0.33 else '🟢'))
         title = row.get('title', '')[:35]
         cat   = row.get('pred_category', '')
         print(f'  {icon} [{cat:6s}] {title}')

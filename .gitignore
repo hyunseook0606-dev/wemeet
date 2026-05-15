@@ -55,3 +55,19 @@ desktop.ini
 # 임시 파일
 *.tmp
 *.bak
+
+# Node.js
+node_modules/
+
+# 프론트엔드 빌드 출력
+frontend/dist/
+
+# 자동 생성 JSON / 출력물
+output/
+
+# Claude Code 메모리 (로컬 전용)
+.claude/
+
+# 불필요한 임시 디렉토리
+nb_structure.txt
+data/_test_result.json

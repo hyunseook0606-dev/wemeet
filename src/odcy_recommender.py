@@ -719,3 +719,109 @@ def to_json(result: dict) -> str:
             return obj.value
         raise TypeError(f"직렬화 불가 타입: {type(obj)}")
     return json.dumps(result, ensure_ascii=False, indent=2, default=_default)
+
+
+# ──────────────────────────────────────────────────────────
+# 10. 목적지 거리 기반 5곳 추천 (MRI 제한 없음 — 모든 고객 이용 가능)
+# ──────────────────────────────────────────────────────────
+
+def recommend_nearest_five(
+    dest_lat:   float,
+    dest_lng:   float,
+    cargo_type: CargoType = CargoType.GENERAL,
+    port_name:  str       = "부산항(북항)",
+    top_n:      int       = 5,
+) -> list[dict]:
+    """
+    고객이 설정한 목적지(항만) 좌표 기준 가장 가까운 창고 5곳을 반환합니다.
+    MRI 등급에 관계없이 모든 고객이 이용 가능합니다.
+
+    Parameters
+    ----------
+    dest_lat / dest_lng : 목적지(항만 CY) 좌표
+    cargo_type          : 화물 유형 (필터 적용)
+    port_name           : 항만 이름 (좌표 조회용)
+    top_n               : 반환 개수 (기본 5)
+
+    Returns
+    -------
+    list[dict] : 거리 오름차순 정렬 창고 목록
+        각 항목: id, name, address, phone, type, bonded, distance_km,
+                 duration_min, operating_hours, special_notes
+    """
+    import copy
+
+    port_coords = PORT_COORDINATES.get(port_name, (dest_lat, dest_lng))
+    port_lat, port_lng = port_coords
+
+    # NLIC DB → 폴백: 시뮬 DB
+    nlic = _load_nlic_db(port_lat, port_lng, radius_m=20000)
+    pool = nlic if nlic else list(SIMULATION_WAREHOUSES)
+
+    # 화물 유형 필터 (느슨하게 — 필터 결과 없으면 전체 사용)
+    filtered = filter_by_cargo_type(copy.deepcopy(pool), cargo_type)
+    if not filtered:
+        filtered = copy.deepcopy(pool)
+
+    # 목적지 기준 거리 계산 + 정렬
+    for wh in filtered:
+        wh_lat = float(wh.get("lat") or wh.get("y") or dest_lat)
+        wh_lng = float(wh.get("lng") or wh.get("x") or dest_lng)
+        km = haversine_km(dest_lat, dest_lng, wh_lat, wh_lng)
+        wh["distance_km"]  = round(km, 2)
+        wh["duration_min"] = round((km / 40) * 60, 1)   # 평균 40 km/h 추정
+
+    filtered.sort(key=lambda w: w["distance_km"])
+
+    result = []
+    for w in filtered[:top_n]:
+        result.append({
+            "id":            w.get("id", ""),
+            "name":          w.get("name") or w.get("place_name", ""),
+            "address":       w.get("address") or w.get("address_name", ""),
+            "phone":         w.get("phone", "전화 문의"),
+            "type":          w.get("type", "창고"),
+            "bonded":        w.get("bonded", None),
+            "cold_chain":    w.get("cold_chain", False),
+            "hazmat_license": w.get("hazmat_license", False),
+            "area_sqm":      w.get("area_sqm", None),
+            "distance_km":   w["distance_km"],
+            "duration_min":  w["duration_min"],
+            "operating_hours": w.get("operating_hours", ""),
+        })
+    return result
+
+
+def calc_total_with_user_price(
+    warehouse_id:    str,
+    user_daily_krw:  int,
+    cbm:             float,
+    delay_days:      int,
+    transfer_krw:    int = 100_000,
+) -> dict:
+    """
+    화주가 전화 문의로 얻은 실제 보관료를 입력하면 총 예상 비용을 계산합니다.
+
+    Parameters
+    ----------
+    warehouse_id   : 추천 창고 ID (표시용)
+    user_daily_krw : 화주가 입력한 일일 보관료 (원/CBM/일)
+    cbm            : 화물 CBM
+    delay_days     : 예상 보관 일수
+    transfer_krw   : 이송비 (원/건, 기본 100,000원)
+
+    Returns
+    -------
+    dict: storage_krw, transfer_krw, total_krw, daily_rate_krw
+    """
+    storage = int(user_daily_krw * cbm * delay_days)
+    total   = storage + transfer_krw
+    return {
+        "warehouse_id":  warehouse_id,
+        "daily_rate_krw": user_daily_krw,
+        "cbm":           cbm,
+        "delay_days":    delay_days,
+        "storage_krw":   storage,
+        "transfer_krw":  transfer_krw,
+        "total_krw":     total,
+    }

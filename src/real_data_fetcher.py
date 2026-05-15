@@ -75,14 +75,95 @@ def fetch_maritime_news(max_per_source: int = 30,
                     'text':     clean[:500],
                     'pub_date': pub.strftime('%Y-%m-%d') if pub else '',
                     'source':   source,
+                    'url':      entry.get('link', ''),
                 })
             logger.info('%s: %d건', source, len(feed.entries))
         except Exception as e:
             logger.warning('%s RSS 실패: %s', source, e)
 
     return pd.DataFrame(records) if records else pd.DataFrame(
-        columns=['title', 'text', 'pub_date', 'source']
+        columns=['title', 'text', 'pub_date', 'source', 'url']
     )
+
+
+# ── MRI 차원 태그 매핑 ────────────────────────────────────────────────────────
+_DIM_KEYWORDS: dict[str, list[str]] = {
+    'G': [
+        'blockade', 'war', 'conflict', 'attack', 'houthi', 'iran', 'russia',
+        'missile', 'tension', 'hormuz', 'red sea', 'strait', 'military',
+        'seizure', 'naval', 'piracy', 'drone', 'sanctions',
+        '봉쇄', '전쟁', '분쟁', '공격', '후티', '이란', '러시아', '미사일',
+        '긴장', '호르무즈', '홍해', '해협', '군사', '위협',
+    ],
+    'D': [
+        'typhoon', 'storm', 'flood', 'earthquake', 'weather', 'cyclone',
+        'hurricane', 'disruption', 'delay', 'divert', 'reroute', 'canal',
+        '태풍', '폭풍', '홍수', '지진', '기상', '결항', '지연', '우회',
+    ],
+    'F': [
+        'freight rate', 'scfi', 'kcci', 'bdi', 'freight index', 'surge',
+        'rate hike', 'spot rate', 'bunker', 'surcharge', 'gri',
+        'blank sailing', 'capacity', 'shortage',
+        '운임', '급등', '운임지수', '선복', '부족', '인상', '할증',
+    ],
+    'P': [
+        'tariff', 'sanction', 'trade war', 'embargo', 'ban', 'customs',
+        'strike', 'labor', 'union', 'walkout', 'port congestion',
+        '관세', '제재', '무역전쟁', '파업', '노조', '항만혼잡', '금지',
+    ],
+}
+
+
+def get_maritime_news_feed(
+    top_n:       int = 10,
+    days_back:   int = 7,
+) -> list[dict]:
+    """
+    최근 해사 뉴스 피드 — MRI 차원 태그·키워드 포함.
+
+    반환: list of dict {
+        'title'       : 기사 제목,
+        'source'      : 언론사,
+        'pub_date'    : 발행일 (YYYY-MM-DD),
+        'url'         : 원문 링크,
+        'dim_tags'    : list[str]  예: ['G', 'F'],
+        'keywords'    : list[str]  매칭된 키워드 (최대 3개),
+    }
+    정렬: 최신순, 리스크 관련 기사 우선
+    """
+    df = fetch_maritime_news(max_per_source=30, days_back=days_back)
+    if df.empty:
+        return []
+
+    results = []
+    for _, row in df.iterrows():
+        combined = (str(row.get('title', '')) + ' ' +
+                    str(row.get('text', ''))).lower()
+
+        dim_tags: list[str] = []
+        keywords: list[str] = []
+        for dim, kws in _DIM_KEYWORDS.items():
+            matched = [kw for kw in kws if kw.lower() in combined]
+            if matched:
+                dim_tags.append(dim)
+                keywords.extend(matched[:2])   # 차원당 최대 2개
+
+        if not dim_tags:
+            continue    # 해사 리스크 무관 기사 제외
+
+        keywords = list(dict.fromkeys(keywords))[:3]   # 중복 제거, 최대 3개
+        results.append({
+            'title':    row.get('title', '').strip(),
+            'source':   row.get('source', ''),
+            'pub_date': row.get('pub_date', ''),
+            'url':      row.get('url', ''),
+            'dim_tags': sorted(set(dim_tags)),
+            'keywords': keywords,
+        })
+
+    # 최신순 정렬 후 상위 top_n
+    results.sort(key=lambda x: x['pub_date'], reverse=True)
+    return results[:top_n]
 
 
 def _parse_rss_date(entry) -> datetime | None:

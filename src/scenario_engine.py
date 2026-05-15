@@ -61,7 +61,7 @@ class RiskContext:
     similar_events:            list[dict]  # historical_matcher 결과
     avg_delay_days:            float       # 유사사례 평균 지연일
     avg_freight_change_pct:    float       # 유사사례 평균 운임 변동률
-    warehouse_recommended:     bool        # MRI >= 0.5 시 True
+    warehouse_recommended:     bool        # 항상 True — 모든 고객 이용 가능 (MRI 등급 무관)
     advisory_note:             str         # 화주에게 보여줄 참고 문구
 
 
@@ -126,8 +126,8 @@ def build_risk_context(
     cats = [top_category] if top_category and top_category != '정상' else ['지정학분쟁']
     similar = find_similar_events(mri, cats, top_k=top_k)
 
-    # MRI < 0.3 (정상) 이면 추정 지연·운임 변동 없음
-    if mri < 0.3:
+    # MRI < 0.33 (정상) 이면 추정 지연·운임 변동 없음
+    if mri < 0.33:
         avg_delay, avg_freight = 0.0, 0.0
     else:
         avg_delay   = round(sum(e['avg_delay_days']           for e in similar) / len(similar), 1) if similar else 0.0
@@ -153,7 +153,7 @@ def build_risk_context(
         similar_events=similar,
         avg_delay_days=avg_delay,
         avg_freight_change_pct=avg_freight,
-        warehouse_recommended=mri >= 0.5,
+        warehouse_recommended=True,   # 모든 고객 이용 가능
         advisory_note=note,
     )
 
@@ -207,21 +207,21 @@ def auto_classify_scenario(today_mri: float,
     if cancel_count > 0:
         return 'E_CANCELLATION'
 
-    if top_category == '지정학분쟁' and today_mri >= 0.7:
+    if top_category == '지정학분쟁' and today_mri >= 0.55:
         return 'B_GEOPOLITICAL'
-    if top_category == '기상재해' and today_mri >= 0.5:
+    if top_category == '기상재해' and today_mri >= 0.43:
         return 'C_WEATHER'
-    if top_category in ('항만파업', '관세정책', '운임급등') and today_mri >= 0.3:
+    if top_category in ('항만파업', '관세정책', '운임급등') and today_mri >= 0.33:
         return 'D_DELAY'
-    if today_mri < 0.3:
+    if today_mri < 0.33:
         return 'A_NORMAL'
 
     # MRI 단독 fallback
-    if today_mri >= 0.7:
+    if today_mri >= 0.55:
         return 'B_GEOPOLITICAL'
-    if today_mri >= 0.5:
+    if today_mri >= 0.43:
         return 'C_WEATHER'
-    if today_mri >= 0.3:
+    if today_mri >= 0.33:
         return 'D_DELAY'
     return 'A_NORMAL'
 

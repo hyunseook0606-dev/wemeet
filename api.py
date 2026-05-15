@@ -29,19 +29,16 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from src.config import SCENARIOS, ROUTE_INFO
+from src.config import ROUTE_INFO
 from src.nlp_classifier import classify_news_df, top_category
 from src.mri_engine import calc_today_mri, build_mri_series, mri_grade, mri_sub_indices
 from src.scenario_engine import (
-    auto_classify_scenario, analyze_impact, ImpactAnalysis,
     build_risk_context, estimate_impact_advisory,
 )
 from src.historical_matcher import find_similar_events
-from src.odcy_recommender import recommend_storage, CargoType
-from src.option_presenter import generate_four_options
-from src.storage_routy_adapter import (
-    generate_storage_routy_json, generate_phase2_routy_json,
-)
+from src.odcy_recommender import recommend_nearest_five, calc_total_with_user_price, CargoType, PORT_COORDINATES
+from src.scenario_cost import calc_scenarios, scenario_to_dict
+from src.storage_routy_adapter import generate_storage_routy_json
 from src.data_loader import load_kcci
 
 app = FastAPI(
@@ -139,7 +136,6 @@ class RoutyJsonRequest(BaseModel):
     warehouse_km:      float
     warehouse_minutes: float
     warehouse_hours:   str = ''
-    phase2_ready_date: Optional[str] = None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -157,19 +153,19 @@ def health():
 @app.get('/api/mri')
 def get_mri():
     """
-    현재 MRI 점수·등급·카테고리·하위지수 반환.
+    현재 MRI 점수·등급·카테고리·하위지수 + 과거 유사사례 맥락 반환.
     뉴스 RSS 자동 수집 (feedparser 없으면 시뮬 데이터).
+    창고 추천은 MRI 등급에 무관하게 항상 제공 (warehouse_available: true).
     """
     data = _get_mri_data()
-    scenario_id = auto_classify_scenario(data['mri'], data['category'])
-    scenario    = SCENARIOS[scenario_id]
+    risk_ctx = build_risk_context(data['mri'], data['category'])
     return {
         **data,
-        'scenario_id':   scenario_id,
-        'scenario_name': scenario['name'],
-        'scenario_icon': scenario['icon'],
-        'delay_days':    scenario['delay_days'],
-        'freight_surge': scenario['freight_surge_pct'],
+        'current_issue':        risk_ctx.current_issue,
+        'avg_delay_days':       risk_ctx.avg_delay_days,
+        'avg_freight_change':   risk_ctx.avg_freight_change_pct,
+        'advisory_note':        risk_ctx.advisory_note,
+        'warehouse_available':  True,   # MRI 무관, 모든 고객 이용 가능
     }
 
 
@@ -250,7 +246,7 @@ def get_lstm_forecast():
 def register_shipment(req: ShipmentRequest):
     """
     화주 출하 등록 → 과거 유사사례 + 현재 이슈 기반 참고 정보 반환.
-    강제 시나리오 없음 — 화주가 A/B/C/D 옵션 중 직접 결정합니다.
+    강제 시나리오 없음 — 화주가 A/B/C 시나리오 중 직접 결정합니다.
     """
     mri_data = _get_mri_data()
     mri      = mri_data['mri']
@@ -311,13 +307,13 @@ def register_shipment(req: ShipmentRequest):
     }
 
 
-# ── Step 3: 창고·ODCY 추천 + 4가지 옵션 ─────────────────────────
+# ── Step 3: 창고 추천 (거리 기반 5곳) + 시나리오 A/B/C 비용 비교 ──
 
 @app.post('/api/warehouse/recommend')
 def warehouse_recommend(req: WarehouseRequest):
     """
-    항만 주변 창고·ODCY 탐색 + A/B/C/D 4가지 옵션 비용 비교.
-    카카오 API 키 있으면 실데이터, 없으면 시뮬 DB.
+    항만 인근 창고 5곳 추천 (거리 기반, MRI 무관 — 모든 고객 이용 가능) +
+    시나리오 A/B/C 비용 비교.
     """
     cargo_map = {
         '일반화물': CargoType.GENERAL,
@@ -329,84 +325,76 @@ def warehouse_recommend(req: WarehouseRequest):
         '전자제품': CargoType.ELECTRONICS,
     }
     cargo_enum = cargo_map.get(req.cargo_type, CargoType.GENERAL)
-    kakao_key  = os.getenv('KAKAO_REST_API_KEY', '')
-    mobi_key   = os.getenv('KAKAO_MOBILITY_KEY', '')
 
-    storage = recommend_storage(
-        port_name=req.port_name,
-        cargo_type=cargo_enum,
-        top_n=3,
-        kakao_rest_key=kakao_key or None,
-        kakao_mobility_key=mobi_key or None,
+    # 목적지(항만) 좌표 기준 5곳 추천
+    dest_lat, dest_lng = PORT_COORDINATES.get(req.port_name, (35.1028, 129.0355))
+    warehouses = recommend_nearest_five(
+        dest_lat=dest_lat, dest_lng=dest_lng,
+        cargo_type=cargo_enum, port_name=req.port_name, top_n=5,
     )
 
-    shipment_dict = {
-        'cargo_type': req.cargo_type,
-        'cbm':        req.cbm,
-        'region':     '경기남부',
-    }
-    options = generate_four_options(
-        shipment=shipment_dict,
-        storage_result=storage,
-        delay_days=req.delay_days,
-        freight_usd=req.freight_usd,
-    )
-
-    warehouses = []
-    for w in storage['recommendations']['comprehensive']:
-        warehouses.append({
-            'name':            w.get('name', ''),
-            'address':         w.get('address', ''),
-            'distance_km':     w.get('distance_km'),
-            'duration_min':    w.get('duration_min'),
-            'operating_hours': w.get('operating_hours', ''),
-            'bonded':          w.get('bonded'),
-            'cold_chain':      w.get('cold_chain'),
-            'special_notes':   w.get('special_notes', ''),
-            'route_source':    w.get('route_source', ''),
-        })
+    # 시나리오 A/B/C 비용 비교
+    scenarios = calc_scenarios(cbm=req.cbm, delay_days=req.delay_days)
 
     return {
-        'simulation_mode': storage['simulation_mode'],
-        'warehouses':      warehouses,
-        'options': [
+        'warehouses': [
             {
-                'id':          o.option_id,
-                'name':        o.option_name,
-                'description': o.description,
-                'total_usd':   round(o.total_usd, 0),
-                'savings_usd': round(o.savings_vs(options[0]), 0) if i > 0 else 0,
-                'savings_pct': round(o.savings_pct_vs(options[0]), 1) if i > 0 else 0,
-                'breakdown': {
-                    'freight':   round(o.freight_usd, 0),
-                    'routy_p1':  round(o.routy_phase1_usd, 0),
-                    'routy_p2':  round(o.routy_phase2_usd, 0),
-                    'rental':    round(o.warehouse_rental_usd, 0),
-                    'contract':  round(o.warehouse_contract_usd, 0),
-                    'risk':      round(o.risk_penalty_usd, 0),
-                },
-                'recommended': o.option_id == 'D',
-                'warehouse_name': o.warehouse.get('name', '') if o.warehouse else '',
+                'id':            w.get('id', ''),
+                'name':          w.get('name', ''),
+                'address':       w.get('address', ''),
+                'phone':         w.get('phone', '전화 문의'),
+                'type':          w.get('type', '창고'),
+                'bonded':        w.get('bonded'),
+                'cold_chain':    w.get('cold_chain'),
+                'distance_km':   w.get('distance_km'),
+                'duration_min':  w.get('duration_min'),
+                'operating_hours': w.get('operating_hours', ''),
+                'note': '보관료는 직접 전화 문의 후 아래 calc_cost API로 계산하세요.',
             }
-            for i, o in enumerate(options)
+            for w in warehouses
         ],
+        'scenarios': [scenario_to_dict(s) for s in scenarios],
+        'scenario_note': (
+            f'CBM={req.cbm}, 예상 지연={req.delay_days}일 기준 시뮬레이션 단가 적용 결과. '
+            '실제 창고 가격 문의 후 /api/warehouse/calc_cost 로 정확한 비용 산출 가능.'
+        ),
     }
+
+
+@app.get('/api/warehouse/calc_cost')
+def calc_warehouse_cost(
+    warehouse_id: str,
+    user_daily_krw: int,
+    cbm: float,
+    delay_days: int,
+):
+    """화주가 전화 문의로 얻은 실제 가격으로 총 예상 비용 계산."""
+    result = calc_total_with_user_price(
+        warehouse_id=warehouse_id,
+        user_daily_krw=user_daily_krw,
+        cbm=cbm,
+        delay_days=delay_days,
+    )
+    return result
 
 
 # ── Step 4: 루티 JSON 생성 ────────────────────────────────────────
 
 @app.post('/api/routy/generate')
 def generate_routy(req: RoutyJsonRequest):
-    """Phase 1 + Phase 2 루티 JSON 생성 및 반환."""
+    """
+    Phase 1 루티 JSON 생성 (출발지 → 보세창고).
+    Phase 2(창고→CY)는 화주가 선적 재개 시점 결정 후 별도 운송 지시.
+    """
     wh = {
-        'name':             req.warehouse_name,
-        'address':          req.warehouse_address,
-        'phone':            '',
-        'type':             '창고',
-        'distance_km':      req.warehouse_km,
-        'duration_min':     req.warehouse_minutes,
-        'special_notes':    '',
-        'operating_hours':  req.warehouse_hours,
+        'name':            req.warehouse_name,
+        'address':         req.warehouse_address,
+        'phone':           '',
+        'type':            '창고',
+        'distance_km':     req.warehouse_km,
+        'duration_min':    req.warehouse_minutes,
+        'special_notes':   '',
+        'operating_hours': req.warehouse_hours,
     }
     cold   = req.cargo_type in ('냉장화물', '냉동화물', '2차전지')
     hazmat = req.cargo_type in ('위험물', '2차전지')
@@ -422,14 +410,8 @@ def generate_routy(req: RoutyJsonRequest):
         mri_current=req.mri_current,
         delay_reason=req.delay_reason,
         recommended_warehouse=wh,
-        phase2_ready_date=req.phase2_ready_date,
     )
-    phase2 = generate_phase2_routy_json(
-        phase1_json=phase1,
-        cy_address=f'{req.port_name} CY',
-        cy_closing_date=req.phase2_ready_date or '2026-06-05',
-    )
-    return {'phase1': phase1, 'phase2': phase2}
+    return {'phase1': phase1}
 
 
 # ── 항로 목록 ─────────────────────────────────────────────────────

@@ -1,69 +1,26 @@
 """
-mri_engine.py — AHP 기반 Maritime Risk Index (MRI) 산출 엔진 (5차원 개선)
+mri_engine.py — 실시간 Maritime Risk Index (MRI) 산출 엔진 (웹앱·API 전용)
 
-[방법론]
-Saaty (1980) AHP 쌍대비교 + 실데이터 근거 기반 5차원 재설계.
+[5대 리스크 차원 — IQR 로버스트 엔트로피 + 등분 하이브리드 가중치]
+  G (지정학·항로): GDELT + Naver DataLab 뉴스 비중     가중치 0.132
+  D (운항방해):   GDELT 부정감성 + 뉴스 빈도           가중치 0.132
+  F (운임 변동):  KCCI/SCFI 월 변화율                 가중치 0.183
+  V (물동량):     KCCI 대리지표 + BPA YoY 방향성       가중치 0.437
+  P (항만·통상):  파업·관세 뉴스 비중                  가중치 0.115
 
-[5대 리스크 차원 & AHP 가중치]
-G (지정학·항로): 0.431 — 봉쇄·전쟁·항로 교란. 운임 최대 100% 영향.
-                           근거: UNCTAD 2024 — 홍해 사태 수에즈 통항 42%~90% 감소
-D (지연·운항):   0.182 — 출항 지연 일수 정규화 (14일 = 1.0).
-                           근거: B1_RED_SEA +14일(케이프타운), B2_HORMUZ +10일
-F (운임 변동):   0.253 — 운임 변동률 정규화 (100% 상승 = 1.0).
-                           근거: 홍해 사태 피크 운임 100%~200% 상승 (UNCTAD 2024)
-V (통행량):      0.090 — 주요 해협 통행량 감소율 정규화 (50% 감소 = 1.0).
-                           근거: UNCTAD 2024 수에즈 통항 90% 감소; EIA 호르무즈 20%
-P (항만·통상):   0.044 — 파업·관세·혼잡 등 운영 차질.
-                           근거: Destatis 2023 독일 항만 파업; USTR 2025 관세 조치
-
-MRI = 0.431·G + 0.182·D + 0.253·F + 0.090·V + 0.044·P   ∈ [0, 1]
+[등급 임계값 — 분위수 기반, 실데이터 136개월]
+  정상 < 0.33 / 주의 0.33~0.43 / 경계 0.43~0.55 / 위험 ≥ 0.55
 
 [정규화 기준]
-  D: delay_days / 14   (14일 = B1_RED_SEA 케이프타운 우회, 최장 사례)
-  F: rate_change / 1.0 (100% 상승 = 포화점, 실제 피크 100~200% → 보수적 기준)
-  V: vol_drop   / 0.5  (50% 감소 = 포화점, 수에즈 42%~90% → 중간값 기준)
-
-[일관성 검증]
-λ_max=5.140, CI=0.035, RI=1.12, CR=3.1% < 10% → 통과
+  F: rate_change / 1.0  (100% 상승 = 포화, 실제 피크 100~200% → 보수적)
+  V: vol_drop    / 0.5  (50% 감소 = 포화, 수에즈 42~90% → 중간값)
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from src.config import MRI_AHP_WEIGHTS, MRI_AHP_MATRIX, MRI_GRADES
-
-
-# ── AHP 계산 유틸리티 ─────────────────────────────────────────────────────────
-
-def compute_ahp_weights(matrix: list[list[float]]) -> dict:
-    """
-    AHP 쌍대비교 행렬 → 가중치 벡터 + 일관성 지표 반환.
-    열 정규화 후 행 평균 (고유벡터 근사법).
-    반환: {weights, lambda_max, CI, CR}
-    """
-    A = np.array(matrix, dtype=float)
-    n = A.shape[0]
-
-    # 열 정규화
-    col_sums = A.sum(axis=0)
-    A_norm   = A / col_sums
-
-    # 가중치 = 행 평균
-    w = A_norm.mean(axis=1)
-
-    # λ_max 계산
-    Aw       = A @ w
-    lambdas  = Aw / w
-    lam_max  = lambdas.mean()
-
-    # 일관성 지표
-    RI_table = {1: 0, 2: 0, 3: 0.58, 4: 0.90, 5: 1.12, 6: 1.24, 7: 1.32}
-    CI = (lam_max - n) / (n - 1)
-    RI = RI_table.get(n, 1.32)
-    CR = CI / RI if RI > 0 else 0
-
-    return {'weights': w.tolist(), 'lambda_max': lam_max, 'CI': CI, 'CR': CR}
+from src.config import MRI_WEIGHTS, MRI_GRADES
 
 
 # ── 오늘 MRI 계산 ─────────────────────────────────────────────────────────────
@@ -71,7 +28,7 @@ def compute_ahp_weights(matrix: list[list[float]]) -> dict:
 def calc_today_mri(news_df: pd.DataFrame,
                    freight_df: pd.DataFrame | None = None) -> float:
     """
-    오늘 MRI = 0.431·G + 0.182·D + 0.253·F + 0.090·V + 0.044·P
+    오늘 MRI = 0.132·G + 0.132·D + 0.183·F + 0.437·V + 0.115·P
 
     [포화점 설계 원칙]
     뉴스 비율은 RSS 전체 기사 중 해당 카테고리 비중이므로,
@@ -121,7 +78,7 @@ def calc_today_mri(news_df: pd.DataFrame,
         0, 1
     ))
 
-    W = MRI_AHP_WEIGHTS
+    W = MRI_WEIGHTS
     mri = W['G']*G + W['D']*D + W['F']*F + W['V']*V + W['P']*P
     return float(np.clip(mri, 0.0, 1.0))
 
@@ -209,8 +166,8 @@ def build_mri_series(dates: pd.DatetimeIndex,
     P_arr[tariff]        = np.clip(P_arr[tariff]        + 0.30,                                         0, 1)
     P_arr[hormuz_actual] = np.clip(P_arr[hormuz_actual] + 0.25,                                         0, 1)
 
-    # ── AHP 가중합 ──────────────────────────────────────────────────────────
-    W   = MRI_AHP_WEIGHTS
+    # ── 하이브리드 엔트로피 가중합 ─────────────────────────────────────────────
+    W   = MRI_WEIGHTS
     mri = W['G']*G + W['D']*D + W['F']*F_arr + W['V']*V_arr + W['P']*P_arr
     return np.clip(mri, 0.0, 1.0)
 

@@ -107,38 +107,114 @@ def load_throughput(data_dir: Path, use_real: bool = True) -> pd.DataFrame | Non
     return df
 
 
-# ── 부산항 2025 Excel + BPA API 결합 ─────────────────────────────────────────
+# ── 부산항 월별 물동량 (항만별물동량 XLS 폴더) ────────────────────────────────
 
-def load_busan_2025_excel(data_dir: Path) -> dict | None:
+def load_busan_monthly_xls(base_dir: Path) -> pd.DataFrame | None:
     """
-    '260414_홈페이지 업데이트_전국항 및 부산항 컨테이너 물동량' Excel에서
-    2025년 부산항 연간 TEU 추출.
-    반환: {'year': 2025, 'teu': float}  또는 None
+    '부산항 월별 물동량' 폴더 구조에서 월별 실측 물동량 로드.
+
+    폴더 구조:
+      부산항 월별 물동량/15년/15년 X월.xls          (2015)
+      부산항 월별 물동량/16년~26년/국가물류통합정보센터_항만별물동량_*.xls  (2016~)
+
+    각 파일 구조:
+      Row 0, Col 4 : 연도 (e.g. "2020")
+      Row 1, Col 4 : 월   (e.g. "03월")
+      Row 14, Col 4: 부산항 합계 물동량 (톤 R/T)
+
+    반환: DataFrame(date, throughput)  단위: 만 톤/월
     """
-    # 파일명 패턴으로 탐색
-    candidates = sorted(data_dir.glob('*컨테이너 물동량*.xlsx')) + \
-                 sorted(data_dir.glob('*컨테이너*물동량*.xlsx'))
-    if not candidates:
-        logger.info('2025 물동량 Excel 없음')
+    import re as _re
+
+    folder = base_dir / '부산항 월별 물동량'
+    if not folder.exists():
+        folder = base_dir.parent / '부산항 월별 물동량'
+    if not folder.exists():
+        logger.info('부산항 월별 물동량 폴더 없음')
         return None
-    fp = candidates[-1]  # 가장 최신 파일
+
+    records = []
+    for year_dir in sorted(folder.iterdir()):
+        if not year_dir.is_dir():
+            continue
+        for fp in sorted(year_dir.glob('*.xls*')):
+            try:
+                df = pd.read_excel(fp, header=None, dtype=str)
+                yr_str  = str(df.iloc[0, 4]).strip()
+                mon_str = str(df.iloc[1, 4]).strip()
+                cargo_str = str(df.iloc[14, 4]).strip().replace(',', '').replace(' ', '')
+
+                yr_m  = _re.search(r'(\d{4})', yr_str)
+                mon_m = _re.search(r'(\d+)', mon_str)
+                if not yr_m or not mon_m:
+                    continue
+
+                year  = int(yr_m.group(1))
+                month = int(mon_m.group(1))
+                cargo = float(cargo_str)
+                if not (1 <= month <= 12 and 2010 <= year <= 2030 and cargo > 0):
+                    continue
+
+                records.append({'year': year, 'month': month, 'cargo_ton': cargo})
+            except Exception:
+                continue
+
+    if not records:
+        logger.warning('부산항 월별 물동량: 파싱된 데이터 없음')
+        return None
+
+    df_all = pd.DataFrame(records)
+    df_all['date'] = pd.to_datetime(
+        df_all['year'].astype(str) + '-' + df_all['month'].astype(str).str.zfill(2),
+        format='%Y-%m'
+    )
+    # 중복 제거 (같은 연월 첫 번째 유지)
+    df_all = (df_all.sort_values('date')
+              .drop_duplicates(subset=['year', 'month'], keep='first')
+              .reset_index(drop=True))
+
+    # 누락 월 선형 보간
+    full_idx = pd.date_range(df_all['date'].min(), df_all['date'].max(), freq='MS')
+    df_all = (df_all.set_index('date')
+              .reindex(full_idx)
+              ['cargo_ton']
+              .interpolate(method='linear')
+              .reset_index()
+              .rename(columns={'index': 'date', 'cargo_ton': 'throughput'}))
+    df_all['throughput'] = (df_all['throughput'] / 10_000).round(2)  # 톤 → 만 톤
+
+    logger.info('부산항 월별 물동량 로드: %d개월 (%s ~ %s), 평균 %.1f만톤',
+                len(df_all),
+                df_all['date'].iloc[0].strftime('%Y-%m'),
+                df_all['date'].iloc[-1].strftime('%Y-%m'),
+                df_all['throughput'].mean())
+    return df_all
+
+
+# ── 부산항 연간 Excel + BPA API 결합 ─────────────────────────────────────────
+
+def load_busan_annual_excel(data_dir: Path) -> dict[int, float] | None:
+    """
+    '전국항 및 부산항 컨테이너 물동량' Excel에서 연도별 부산항 연간 TEU 추출.
+    반환: {2010: teu, 2011: teu, ..., 2025: teu}  (가용 연도만 포함)
+    """
+    candidates = (sorted(data_dir.glob('*컨테이너 물동량*.xlsx')) +
+                  sorted(data_dir.glob('*컨테이너*물동량*.xlsx')))
+    if not candidates:
+        logger.info('물동량 Excel 없음')
+        return None
+    fp = candidates[-1]
     try:
         df = pd.read_excel(fp, sheet_name=0, header=None)
-        # 구조: 행0~3=헤더, 행4~=데이터 / 열0=연도, 열5=부산항 합계
-        # 헤더 탐색 (연도 컬럼 위치 확인)
-        year_col, busan_col = None, None
+        year_col, busan_col = 0, 5
         for r in range(min(6, len(df))):
             row_vals = [str(v) for v in df.iloc[r].tolist()]
             if any('연도' in v for v in row_vals):
                 year_col = next(i for i, v in enumerate(row_vals) if '연도' in v)
             if any('부산항' in v for v in row_vals):
                 busan_col = next(i for i, v in enumerate(row_vals) if '부산항' in v)
-        if year_col is None:
-            year_col = 0   # 기본: 첫 번째 컬럼
-        if busan_col is None:
-            busan_col = 5  # 기본: 6번째 컬럼 (부산항 합계)
 
-        records = {}
+        records: dict[int, float] = {}
         for _, row in df.iterrows():
             try:
                 yr  = int(float(str(row.iloc[year_col])))
@@ -148,61 +224,70 @@ def load_busan_2025_excel(data_dir: Path) -> dict | None:
             except (ValueError, TypeError):
                 continue
 
-        if 2025 in records:
-            logger.info('Excel 2025 부산항: %.0f TEU (%.1f만/월평균)',
-                        records[2025], records[2025]/12/10000)
-            return {'year': 2025, 'teu': records[2025]}
-        logger.warning('Excel에서 2025년 데이터 미발견')
-        return None
+        if records:
+            yrs = sorted(records)
+            logger.info('Excel 부산항 연간 데이터: %d~%d (%d개년)',
+                        yrs[0], yrs[-1], len(records))
+        return records if records else None
     except Exception as e:
         logger.warning('Excel 파싱 오류: %s', e)
         return None
 
 
 def load_busan_throughput_combined(data_dir: Path,
-                                   start_year: int = 2020) -> pd.DataFrame | None:
+                                   start_year: int = 2015) -> pd.DataFrame | None:
     """
     부산항 월별 물동량 통합 로더.
 
-    [데이터 소스]
-    - 2020~2024: BPA 공공데이터포털 API (연도별 TEU + 계절 분해)
-    - 2025:      수동 수집 Excel (BPA 홈페이지 업데이트 자료)
-    양쪽 모두 계절 분해(seasonal decomposition) 적용.
+    [데이터 소스 & 우선순위]
+    1순위: '부산항 월별 물동량' 폴더 XLS (월별 실측, 2015-01~2026-03)
+    2순위: 연간 Excel 계절 분배 (실측 폴더 없을 때 폴백)
+    3순위: BPA API (2020~2024)
 
-    반환: DataFrame(date, throughput) 단위: 만 TEU/월
+    반환: DataFrame(date, throughput) 단위: 만 톤/월
     """
+    # 1순위: 월별 실측 XLS 폴더
+    df_monthly = load_busan_monthly_xls(data_dir.parent)
+    if df_monthly is not None and not df_monthly.empty:
+        df_monthly = df_monthly[
+            df_monthly['date'].dt.year >= start_year
+        ].reset_index(drop=True)
+        logger.info('부산항 물동량: 월별 실측 XLS 사용 (%d개월)', len(df_monthly))
+        return df_monthly
+
+    # 2순위: 연간 Excel 계절 분배
     from src.real_data_fetcher import fetch_bpa_throughput, _SEASONAL_NORM
-    import pandas as pd
+    today = pd.Timestamp.today()
+    annual = load_busan_annual_excel(data_dir)
+    rows_excel: list[dict] = []
+    if annual:
+        for yr, annual_teu in sorted(annual.items()):
+            if yr < start_year:
+                continue
+            monthly_avg_10k = annual_teu / 12 / 10_000
+            for month in range(1, 13):
+                dt = pd.Timestamp(yr, month, 1)
+                if dt > today:
+                    break
+                rows_excel.append({
+                    'date':       dt,
+                    'throughput': round(monthly_avg_10k * _SEASONAL_NORM[month - 1], 2),
+                })
+    df_excel = pd.DataFrame(rows_excel) if rows_excel else None
 
-    # 2020-2024: BPA API
-    df_api = fetch_bpa_throughput(start_year=start_year)
+    # 3순위: BPA API
+    df_api = fetch_bpa_throughput(start_year=max(start_year, 2020))
 
-    # 2025: Excel
-    rec2025 = load_busan_2025_excel(data_dir)
-    df_2025 = None
-    if rec2025:
-        today = pd.Timestamp.today()
-        monthly_avg = rec2025['teu'] / 12 / 10_000
-        rows = []
-        for month in range(1, 13):
-            dt = pd.Timestamp(2025, month, 1)
-            if dt <= today:
-                rows.append({'date': dt,
-                             'throughput': round(monthly_avg * _SEASONAL_NORM[month-1], 2)})
-        if rows:
-            df_2025 = pd.DataFrame(rows)
-
-    # 결합
-    parts = [p for p in [df_api, df_2025] if p is not None and not p.empty]
+    parts = [p for p in [df_excel, df_api] if p is not None and not p.empty]
     if not parts:
-        logger.warning('BPA API + Excel 모두 실패 — 시뮬 폴백')
+        logger.warning('부산항 물동량 모든 소스 실패')
         return None
 
     combined = (pd.concat(parts, ignore_index=True)
                 .sort_values('date')
                 .drop_duplicates('date', keep='last')
                 .reset_index(drop=True))
-    logger.info('부산항 물동량 통합: %d개월 (%s ~ %s)',
+    logger.info('부산항 물동량 통합(계절분배): %d개월 (%s ~ %s)',
                 len(combined),
                 combined['date'].iloc[0].strftime('%Y.%m'),
                 combined['date'].iloc[-1].strftime('%Y.%m'))
