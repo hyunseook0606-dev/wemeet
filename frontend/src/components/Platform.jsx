@@ -798,14 +798,21 @@ export default function Platform() {
                   </div>
                   <div className="space-y-2 text-xs text-slate-500">
                     {[
-                      { path: '/api/health', desc: '서버 상태' },
-                      { path: '/api/mri', desc: '실시간 MRI' },
-                      { path: '/api/shipment/register', desc: '화물 등록' },
-                      { path: '/api/warehouse/recommend', desc: '창고 추천' },
-                      { path: '/api/routy/generate', desc: 'Routy JSON' },
+                      { path: '/api/health',                desc: '서버 상태',        method: 'GET'  },
+                      { path: '/api/mri',                   desc: '실시간 MRI',       method: 'GET'  },
+                      { path: '/api/mri/similar-events',    desc: '과거 유사사례',    method: 'GET'  },
+                      { path: '/api/mri/lstm-forecast',     desc: 'LSTM 예측',        method: 'GET'  },
+                      { path: '/api/shipment/register',     desc: '화물 등록',        method: 'POST' },
+                      { path: '/api/warehouse/recommend',   desc: '창고 추천 + A/B/C', method: 'POST' },
+                      { path: '/api/warehouse/calc_cost',   desc: '직접 가격 계산',   method: 'GET'  },
+                      { path: '/api/routy/generate',        desc: 'Phase 1 JSON',     method: 'POST' },
+                      { path: '/api/routes',                desc: '항로 목록',        method: 'GET'  },
                     ].map(e => (
                       <div key={e.path} className="flex justify-between py-1.5 border-b border-white/5">
-                        <code className="text-blue-400">{e.path}</code>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs px-1 rounded font-mono ${e.method === 'POST' ? 'text-green-400 bg-green-400/10' : 'text-blue-400 bg-blue-400/10'}`}>{e.method}</span>
+                          <code className="text-slate-400">{e.path}</code>
+                        </div>
                         <span>{e.desc}</span>
                       </div>
                     ))}
