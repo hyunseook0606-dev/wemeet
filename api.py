@@ -92,7 +92,7 @@ def _get_mri_data() -> dict:
     try:
         from src.real_data_fetcher import fetch_maritime_news
         import feedparser  # noqa
-        news_df = fetch_maritime_news(max_per_source=10, days_back=7)
+        news_df = fetch_maritime_news(max_per_source=30, days_back=30)
         # 시뮬 소스가 아닌 실제 뉴스 기사 수 확인
         real_count = int((news_df.get('source', pd.Series(dtype=str)) != 'sim').sum())
         if real_count > 0:

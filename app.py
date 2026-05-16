@@ -171,7 +171,7 @@ def _load_news():
     try:
         from src.real_data_fetcher import fetch_maritime_news
         import feedparser  # noqa
-        df = fetch_maritime_news(max_per_source=10, days_back=7)
+        df = fetch_maritime_news(max_per_source=30, days_back=30)
         if not df.empty:
             return df
     except Exception:
