@@ -277,24 +277,6 @@ export default function Hero() {
             </a>
           </motion.div>
 
-          {/* Quick stats row */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.6 }}
-            className="mt-14 flex flex-wrap gap-8"
-          >
-            {[
-              { value: '28%', label: '물류비 절감' },
-              { value: '99.5%', label: '배송 정확도' },
-              { value: '3,000+', label: '가입 기업' },
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="text-2xl font-bold text-gradient">{s.value}</div>
-                <div className="text-slate-400 text-sm mt-0.5">{s.label}</div>
-              </div>
-            ))}
-          </motion.div>
         </div>
       </div>
 
