@@ -44,7 +44,7 @@ const steps = [
   {
     step: '04',
     title: 'Routy JSON 자동 생성',
-    desc: 'Phase 1(출발지→보세창고) 운송 지시 JSON을 자동 생성합니다. Phase 2는 화주가 선적 재개 시점을 직접 결정 후 별도 요청합니다.',
+    desc: '출발지→보세창고 운송 지시 JSON을 자동 생성합니다. 선적 재개 시점은 화주가 직접 결정하며, 이후 운송 지시는 별도로 진행됩니다.',
     color: '#10B981',
     icon: (
       <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -52,7 +52,7 @@ const steps = [
           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
-    detail: ['Phase 1 JSON 생성 (출발지→창고)', '루티 배차 API 즉시 연동', '공동물류 그룹 자동 편성'],
+    detail: ['루티 JSON 생성 (출발지→보세창고)', '루티 배차 API 즉시 연동', '공동물류 그룹 자동 편성'],
   },
 ]
 

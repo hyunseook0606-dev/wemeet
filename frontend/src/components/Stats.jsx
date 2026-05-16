@@ -1,50 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
-
-function useCounter(target, duration = 1800, inView = false) {
-  const [count, setCount] = useState(0)
-  useEffect(() => {
-    if (!inView) return
-    let start = 0
-    const step = target / (duration / 16)
-    const timer = setInterval(() => {
-      start += step
-      if (start >= target) { setCount(target); clearInterval(timer) }
-      else setCount(Math.floor(start))
-    }, 16)
-    return () => clearInterval(timer)
-  }, [inView, target, duration])
-  return count
-}
-
-function StatCard({ stat, index }) {
-  const ref = useRef(null)
-  const inView = useInView(ref, { once: true })
-  const count = useCounter(stat.numericValue, 1600, inView)
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="text-center p-6"
-    >
-      <div className="text-5xl font-bold text-gradient mb-2">
-        {stat.prefix ?? ''}{count}{stat.suffix ?? ''}
-      </div>
-      <div className="text-white font-semibold text-lg mb-1">{stat.label}</div>
-      <div className="text-slate-500 text-sm">{stat.sub}</div>
-    </motion.div>
-  )
-}
-
-const stats = [
-  { numericValue: 28, suffix: '%', label: '물류비 절감', sub: '공동물류 통합 배송 기준' },
-  { numericValue: 35, suffix: '%', label: 'CO₂ 배출 감축', sub: '현재 55% → 5% 목표' },
-  { numericValue: 99, suffix: '.5%', label: '배송 정확도', sub: 'ShipGo 실측 데이터' },
-  { numericValue: 3000, suffix: '+', label: '가입 기업', sub: '6개월 내 목표 기업 수' },
-]
 
 const partners = [
   'CJ대한통운', 'LX판토스', '한국해양수산개발원', '부산항만공사',
@@ -62,30 +17,6 @@ const timeline = [
 export default function Stats() {
   return (
     <>
-      {/* Stats Section */}
-      <section id="platform" className="py-20 bg-[#0D1627] relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
-
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <span className="text-blue-400 text-sm font-medium tracking-widest uppercase">Impact Numbers</span>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mt-3">
-              숫자로 증명하는 <span className="text-gradient">성과</span>
-            </h2>
-          </motion.div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/5">
-            {stats.map((s, i) => <StatCard key={s.label} stat={s} index={i} />)}
-          </div>
-        </div>
-      </section>
-
       {/* Timeline */}
       <section className="py-20 bg-[#0A0F1E]">
         <div className="max-w-7xl mx-auto px-6">

@@ -29,7 +29,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from src.config import ROUTE_INFO
+from src.config import ROUTE_INFO, RISK_KEYWORDS
 from src.nlp_classifier import classify_news_df, top_category
 from src.mri_engine import calc_today_mri, build_mri_series, mri_grade, mri_sub_indices
 from src.scenario_engine import (
@@ -93,16 +93,32 @@ def _get_mri_data() -> dict:
     cat = top_category(news_df)
     sub = mri_sub_indices(news_df, freight_df)
 
+    # 뉴스 타이틀에서 상위 키워드 추출 (top_category 우선, 나머지 보충)
+    extracted_kws: list[str] = []
+    if not news_df.empty and 'title' in news_df.columns:
+        all_titles = ' '.join(news_df['title'].fillna('').tolist()).lower()
+        check_order = [cat] + [c for c in RISK_KEYWORDS if c != cat]
+        for check_cat in check_order:
+            for kw in RISK_KEYWORDS.get(check_cat, []):
+                if len(kw) >= 2 and kw.lower() in all_titles and kw not in extracted_kws:
+                    extracted_kws.append(kw)
+                if len(extracted_kws) >= 6:
+                    break
+            if len(extracted_kws) >= 6:
+                break
+
     _NEWS_CACHE = news_df
     _MRI_CACHE  = {
-        'mri':         round(today, 4),
-        'grade':       grade,
-        'color':       color,
-        'category':    cat,
-        'sub_indices': {k: round(v, 4) for k, v in sub.items()},
-        'data_source': data_source,   # 'realtime' | 'simulation'
-        'news_count':  news_count,    # 실뉴스 기사 수 (0이면 시뮬)
-        'kcci_loaded': freight_df is not None,
+        'mri':          round(today, 4),
+        'grade':        grade,
+        'color':        color,
+        'category':     cat,
+        'top_category': cat,
+        'top_keywords': extracted_kws,
+        'sub_indices':  {k: round(v, 4) for k, v in sub.items()},
+        'data_source':  data_source,   # 'realtime' | 'simulation'
+        'news_count':   news_count,    # 실뉴스 기사 수 (0이면 시뮬)
+        'kcci_loaded':  freight_df is not None,
     }
     return _MRI_CACHE
 
@@ -174,10 +190,12 @@ def get_mri(refresh: bool = False):
         _MRI_CACHE = None
         _NEWS_CACHE = None
     data = _get_mri_data()
-    risk_ctx = build_risk_context(data['mri'], data['category'])
+    news_kws = data.get('top_keywords', [])
+    risk_ctx = build_risk_context(data['mri'], data['category'], news_keywords=news_kws)
     return {
         **data,
         'current_issue':        risk_ctx.current_issue,
+        'top_keywords':         risk_ctx.top_keywords or news_kws,
         'avg_delay_days':       risk_ctx.avg_delay_days,
         'avg_freight_change':   risk_ctx.avg_freight_change_pct,
         'advisory_note':        risk_ctx.advisory_note,

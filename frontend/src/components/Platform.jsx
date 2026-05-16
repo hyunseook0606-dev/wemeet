@@ -656,7 +656,7 @@ function RoutyPanel({ shipmentResult, warehouseResult, formData, portName }) {
           </div>
           <button onClick={download}
             className="w-full py-3 rounded-xl border border-green-500/40 text-green-400 text-sm hover:bg-green-500/10 transition-all">
-            📥 JSON 다운로드 (Phase 1 — 출발지→창고)
+            📥 Routy JSON 다운로드 (출발지→보세창고)
           </button>
         </>
       ) : (

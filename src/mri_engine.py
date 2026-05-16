@@ -70,7 +70,7 @@ def calc_today_mri(news_df: pd.DataFrame,
         vol_chg = freight_df['value'].pct_change().tail(4).mean()
         V = float(np.clip(-vol_chg / 0.10, 0, 1))
     else:
-        V = float(np.clip(G * 0.84, 0, 1))  # 수에즈 42%/50%=0.84 × G 비례
+        V = 0.0  # 물동량 실데이터 없을 때 과대추정 방지 (G 프록시 제거)
 
     # P: 항만·통상 — 포화점 20%
     P = float(np.clip(
@@ -211,7 +211,7 @@ def mri_sub_indices(news_df: pd.DataFrame,
         vol_chg = freight_df['value'].pct_change().tail(4).mean()
         V = float(np.clip(-vol_chg / 0.10, 0, 1))
     else:
-        V = float(np.clip(G * 0.84, 0, 1))
+        V = 0.0  # 물동량 실데이터 없을 때 과대추정 방지
 
     P = float(np.clip(
         (counts.get('항만파업', 0) + counts.get('관세정책', 0)) / total / 0.20,
