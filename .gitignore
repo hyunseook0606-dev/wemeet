@@ -33,6 +33,8 @@ htmlcov/
 
 # 데이터 (용량 큼, 별도 관리)
 data/*.csv
+!data/gdelt_maritime_monthly.csv
+!data/kcci_weekly.csv
 data/*.xlsx
 data/ecos_cache/
 
