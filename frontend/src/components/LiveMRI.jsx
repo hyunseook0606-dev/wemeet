@@ -75,6 +75,11 @@ const MOCK_DATA = {
   current_issue: '글로벌 운임 상승세 지속 중',
   top_keywords: ['운임', '급등', 'SCFI', '선복', '부족'],
   sub_indices: { G: 0.30, D: 0.30, F: 0.55, V: 0.10, P: 0.15 },
+  recent_news: [
+    { title: 'Freight rates surge amid tariff uncertainty', source: 'gCaptain', pub_date: '', category: '운임급등' },
+    { title: '미중 관세전쟁으로 선복 수요 급변', source: '한국해운신문', pub_date: '', category: '관세정책' },
+    { title: 'Container market faces capacity crunch', source: 'Splash247', pub_date: '', category: '운임급등' },
+  ],
   data_source: 'mock',
 }
 
@@ -253,6 +258,31 @@ export default function LiveMRI() {
                           >
                             #{kw}
                           </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* 최근 해운 뉴스 헤드라인 */}
+                  {(data?.recent_news?.length ?? 0) > 0 && (
+                    <div>
+                      <div className="text-slate-500 text-xs mb-2 mt-1">최근 수집 뉴스</div>
+                      <div className="space-y-1.5">
+                        {data.recent_news.map((n, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-2 text-xs bg-white/5 rounded-lg px-3 py-2"
+                          >
+                            <span
+                              className="flex-shrink-0 px-1.5 py-0.5 rounded text-xs"
+                              style={{
+                                background: 'rgba(99,102,241,0.15)',
+                                color: '#A5B4FC',
+                              }}
+                            >
+                              {n.source || '—'}
+                            </span>
+                            <span className="text-slate-400 leading-tight line-clamp-2">{n.title}</span>
+                          </div>
                         ))}
                       </div>
                     </div>

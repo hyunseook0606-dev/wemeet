@@ -193,10 +193,25 @@ def get_mri(refresh: bool = False):
     data = _get_mri_data()
     news_kws = data.get('top_keywords', [])
     risk_ctx = build_risk_context(data['mri'], data['category'], news_keywords=news_kws)
+
+    # 최근 해운 뉴스 헤드라인 (최대 5건, _NEWS_CACHE에서 추출)
+    recent_news: list[dict] = []
+    if _NEWS_CACHE is not None and not _NEWS_CACHE.empty:
+        for _, row in _NEWS_CACHE.head(5).iterrows():
+            title = str(row.get('title', ''))
+            if title and title.lower() not in ('nan', ''):
+                recent_news.append({
+                    'title':    title[:100],
+                    'source':   str(row.get('source', '')),
+                    'pub_date': str(row.get('pub_date', '')),
+                    'category': str(row.get('pred_category', '')),
+                })
+
     return {
         **data,
         'current_issue':        risk_ctx.current_issue,
         'top_keywords':         risk_ctx.top_keywords or news_kws,
+        'recent_news':          recent_news,
         'avg_delay_days':       risk_ctx.avg_delay_days,
         'avg_freight_change':   risk_ctx.avg_freight_change_pct,
         'advisory_note':        risk_ctx.advisory_note,
