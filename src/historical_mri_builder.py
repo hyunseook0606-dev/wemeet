@@ -469,8 +469,14 @@ def forecast_bpa_lstm(
         import torch
         import torch.nn as nn
     except ImportError:
-        logger.warning("torch 미설치 — BPA LSTM 예측 불가, ffill 유지")
-        return None
+        # torch 없으면 선형 외삽 폴백 (12개월 추세 기반)
+        values = bpa_df.sort_values("date")["throughput"].values.astype(float)
+        slope = (values[-1] - values[-min(12, len(values))]) / (min(12, len(values)) - 1)
+        last_date = bpa_df["date"].max()
+        pred_vals = [values[-1] + slope * (i + 1) for i in range(n_months)]
+        dates = [last_date + pd.DateOffset(months=i + 1) for i in range(n_months)]
+        return pd.DataFrame({"date": dates, "throughput": pred_vals})
+
 
     torch.manual_seed(42)
     np.random.seed(42)
