@@ -70,7 +70,7 @@ const features = [
       </svg>
     ),
     title: 'Routy API 연동',
-    desc: 'Phase 1(출발지→보세창고) 운송 지시서(JSON)를 자동 생성합니다. Phase 2는 화주가 선적 재개 시점 확정 후 별도 운송 지시합니다.',
+    desc: '출발지→보세창고 운송 지시서(JSON)를 자동 생성하여 루티(ROOUTY) 배차 API에 즉시 연동합니다. 선적 재개 시점은 화주가 직접 결정합니다.',
     color: 'from-pink-600/20 to-pink-600/5',
     accent: '#EC4899',
   },
