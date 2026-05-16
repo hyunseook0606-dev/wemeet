@@ -31,7 +31,8 @@ import pandas as pd
 
 from src.config import ROUTE_INFO, RISK_KEYWORDS
 from src.nlp_classifier import classify_news_df, top_category
-from src.mri_engine import calc_today_mri, build_mri_series, mri_grade, mri_sub_indices
+from src.mri_engine import mri_grade
+from src.historical_mri_builder import build_real_mri_series, predict_mri_trend
 from src.scenario_engine import (
     build_risk_context, estimate_impact_advisory,
 )
@@ -55,9 +56,11 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-# ── 캐시 (프로세스 내 1회) ─────────────────────────────────────────────────
-_NEWS_CACHE: pd.DataFrame | None = None
-_MRI_CACHE:  dict | None         = None
+# ── 캐시 ─────────────────────────────────────────────────────────────────
+_NEWS_CACHE:   pd.DataFrame | None = None
+_MRI_CACHE:    dict | None         = None
+_MRI_DF_CACHE: pd.DataFrame | None = None  # 역사 시계열 캐시 (24시간)
+_MRI_CACHE_TIME: datetime | None   = None
 
 _GEO_SIGNALS = {
     'iran', 'hormuz', '이란', '호르무즈', 'houthi', '후티',
@@ -80,45 +83,59 @@ def _effective_category(category: str, news_kws: list[str], sub: dict) -> str:
     return category
 
 
+def _get_mri_df() -> pd.DataFrame:
+    """역사 MRI 시계열 (24시간 캐시)."""
+    global _MRI_DF_CACHE, _MRI_CACHE_TIME
+    now = datetime.now()
+    if _MRI_DF_CACHE is not None and _MRI_CACHE_TIME is not None:
+        if (now - _MRI_CACHE_TIME).total_seconds() < 86400:
+            return _MRI_DF_CACHE
+    _MRI_DF_CACHE  = build_real_mri_series(data_dir=ROOT / 'data', project_root=ROOT)
+    _MRI_CACHE_TIME = now
+    return _MRI_DF_CACHE
+
+
 def _get_mri_data() -> dict:
-    """MRI 계산 결과 캐시 (프로세스 내 1회)."""
+    """MRI 계산 — 노트북과 동일한 실데이터 엔트로피 방식 (24시간 캐시)."""
     global _NEWS_CACHE, _MRI_CACHE
     if _MRI_CACHE is not None:
         return _MRI_CACHE
 
-    data_source = 'simulation'
-    news_count  = 0
+    # ── 실데이터 MRI (노트북과 동일) ──────────────────────────────────────
+    mri_df  = _get_mri_df()
+    latest  = mri_df.iloc[-1]
+    today   = float(latest['mri_entropy'])
+    grade, color = mri_grade(today)
+    sub = {dim: round(float(latest.get(dim, 0)), 4) for dim in ['G', 'D', 'F', 'V', 'P']}
 
+    # ── 뉴스 RSS (카테고리 분류 + 키워드 + 헤드라인용) ────────────────────
+    news_count = 0
+    data_source = 'realtime'
     try:
         from src.real_data_fetcher import fetch_maritime_news
         import feedparser  # noqa
         news_df = fetch_maritime_news(max_per_source=30, days_back=30)
-        # 시뮬 소스가 아닌 실제 뉴스 기사 수 확인
         real_count = int((news_df.get('source', pd.Series(dtype=str)) != 'sim').sum())
         if real_count > 0:
-            data_source = 'realtime'
-            news_count  = real_count
+            news_count = real_count
+        else:
+            data_source = 'simulation'
     except Exception:
         news_df = pd.DataFrame([
             {'title': 'Houthi attack Red Sea blockade', 'text': 'hormuz threat iran', 'source': 'sim'},
             {'title': '호르무즈 봉쇄 위협', 'text': '이란 미사일 위협', 'source': 'sim'},
             {'title': 'freight rate surge SCFI', 'text': 'capacity shortage bunker', 'source': 'sim'},
         ])
+        data_source = 'simulation'
 
     news_df = classify_news_df(news_df)
-    freight_df = load_kcci(ROOT / 'data', use_real=True)
-
-    today = calc_today_mri(news_df, freight_df)
-    grade, color = mri_grade(today)
     cat = top_category(news_df)
-    sub = mri_sub_indices(news_df, freight_df)
 
-    # 뉴스 타이틀에서 상위 키워드 추출 (위험도 높은 카테고리 우선)
+    # 키워드 추출 (위험도 높은 카테고리 우선)
     extracted_kws: list[str] = []
     if not news_df.empty and 'title' in news_df.columns:
         all_titles = ' '.join(news_df['title'].fillna('').tolist()).lower()
-        check_order = ['지정학분쟁', '항만파업', '관세정책', '운임급등', '기상재해', '정상']
-        for check_cat in check_order:
+        for check_cat in ['지정학분쟁', '항만파업', '관세정책', '운임급등', '기상재해', '정상']:
             for kw in RISK_KEYWORDS.get(check_cat, []):
                 if len(kw) >= 2 and kw.lower() in all_titles and kw not in extracted_kws:
                     extracted_kws.append(kw)
@@ -135,10 +152,10 @@ def _get_mri_data() -> dict:
         'category':     cat,
         'top_category': cat,
         'top_keywords': extracted_kws,
-        'sub_indices':  {k: round(v, 4) for k, v in sub.items()},
-        'data_source':  data_source,   # 'realtime' | 'simulation'
-        'news_count':   news_count,    # 실뉴스 기사 수 (0이면 시뮬)
-        'kcci_loaded':  freight_df is not None,
+        'sub_indices':  sub,
+        'data_source':  data_source,
+        'news_count':   news_count,
+        'kcci_loaded':  True,
         'cached_at':    datetime.now().strftime('%Y-%m-%d %H:%M KST'),
     }
     return _MRI_CACHE
@@ -237,6 +254,36 @@ def get_mri(refresh: bool = False):
         'avg_freight_change':   risk_ctx.avg_freight_change_pct,
         'advisory_note':        risk_ctx.advisory_note,
         'warehouse_available':  True,   # MRI 무관, 모든 고객 이용 가능
+    }
+
+
+@app.get('/api/mri/trend')
+def get_mri_trend():
+    """
+    역대 MRI 시계열 + 3개월 예측 + 추세 확률.
+    프론트엔드 추세선 차트용.
+    """
+    mri_df = _get_mri_df()
+    trend  = predict_mri_trend(mri_df, data_dir=ROOT / 'data', project_root=ROOT)
+    forecast_df: pd.DataFrame = trend['forecast_df']
+
+    history = [
+        {'date': row['date'].strftime('%Y-%m'), 'mri': round(float(row['mri_entropy']), 4)}
+        for _, row in mri_df.iterrows()
+    ]
+    forecast = [
+        {'date': row['date'].strftime('%Y-%m'), 'mri': round(float(row['mri_forecast']), 4)}
+        for _, row in forecast_df.iterrows()
+    ]
+    return {
+        'history':      history,
+        'forecast':     forecast,
+        'prob_up':      trend['prob_up'],
+        'prob_stay':    trend['prob_stay'],
+        'prob_down':    trend['prob_down'],
+        'n_historical': trend['n_historical'],
+        'current_mri':  trend['current_mri'],
+        'current_grade': trend['current_grade'],
     }
 
 

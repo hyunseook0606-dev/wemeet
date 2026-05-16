@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { api } from '../hooks/useApi'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ReferenceLine, ResponsiveContainer, Legend
+} from 'recharts'
 
 const MRI_GRADES = [
   { grade: '위험', range: '0.55 이상', color: '#EF4444', min: 0.55, max: 1.01, icon: '🔴' },
@@ -83,10 +87,115 @@ const MOCK_DATA = {
   data_source: 'mock',
 }
 
+// MRI 등급 구간 색상
+function getMRIZoneColor(mri) {
+  if (mri >= 0.55) return '#EF4444'
+  if (mri >= 0.43) return '#F97316'
+  if (mri >= 0.33) return '#EAB308'
+  return '#22C55E'
+}
+
+// 추세 차트 — 실측(파란선) + 예측(빨간점선) + 도넛 확률
+function MRITrendChart({ trendData }) {
+  if (!trendData) return null
+  const { history, forecast, prob_up, prob_stay, prob_down, n_historical, current_mri, current_grade } = trendData
+
+  // 마지막 12개월 실측 + 3개월 예측 병합
+  const recentHistory = history.slice(-14)
+  const lastHistDate  = recentHistory[recentHistory.length - 1]?.date
+  const chartData = [
+    ...recentHistory.map(d => ({ date: d.date, actual: d.mri })),
+    ...forecast.map(d => ({ date: d.date, forecast: d.mri })),
+  ]
+
+  // 도넛 SVG
+  const DONUT_R = 40, DONUT_SW = 14
+  const circum = 2 * Math.PI * DONUT_R
+  const upPct    = Math.round(prob_up   * 100)
+  const stayPct  = Math.round(prob_stay * 100)
+  const downPct  = Math.round(prob_down * 100)
+  const upLen    = circum * prob_up
+  const stayLen  = circum * prob_stay
+  const downLen  = circum * prob_down
+  // offsets: start from top (rotate -90)
+  const upOff    = 0
+  const stayOff  = -(circum - upLen)
+  const downOff  = -(circum - upLen - stayLen)
+
+  return (
+    <div className="card-glass rounded-2xl p-6 mt-4">
+      <h3 className="text-white font-semibold mb-1">MRI 추세 예측</h3>
+      <p className="text-slate-500 text-xs mb-4">
+        현재 {current_mri?.toFixed(3)} [{current_grade}] · 역사 사례 {n_historical}건 기반
+      </p>
+      <div className="flex flex-col md:flex-row gap-6 items-center">
+        {/* 추세선 차트 */}
+        <div className="flex-1 w-full" style={{ height: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }}
+                tickFormatter={v => v.slice(2)} interval="preserveStartEnd" />
+              <YAxis domain={[0, 0.8]} tick={{ fill: '#64748b', fontSize: 10 }}
+                tickFormatter={v => v.toFixed(1)} />
+              <Tooltip
+                contentStyle={{ background: '#0D1627', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                labelStyle={{ color: '#94a3b8', fontSize: 11 }}
+                formatter={(val, name) => [val?.toFixed(3), name === 'actual' ? '실측 MRI' : '예측 MRI']}
+              />
+              {/* 등급 구간 선 */}
+              {[0.33, 0.43, 0.55].map(v => (
+                <ReferenceLine key={v} y={v} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+              ))}
+              {/* 실측/예측 연결점 표시용 기준선 */}
+              {lastHistDate && (
+                <ReferenceLine x={lastHistDate} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
+              )}
+              <Line dataKey="actual" stroke="#3B82F6" strokeWidth={2} dot={false}
+                name="실측 MRI" connectNulls />
+              <Line dataKey="forecast" stroke="#EF4444" strokeWidth={2}
+                strokeDasharray="6 3" dot={{ r: 3, fill: '#EF4444' }}
+                name="예측 MRI (3개월)" connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 도넛 확률 */}
+        <div className="flex flex-col items-center gap-3 flex-shrink-0">
+          <p className="text-slate-500 text-xs text-center">3개월 후 추세 확률<br/><span className="text-slate-600">(역사 사례 {n_historical}건)</span></p>
+          <svg width={100} height={100} viewBox="0 0 100 100">
+            <circle cx={50} cy={50} r={DONUT_R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={DONUT_SW} />
+            {/* 상승 — 빨강 */}
+            <circle cx={50} cy={50} r={DONUT_R} fill="none" stroke="#EF4444" strokeWidth={DONUT_SW}
+              strokeDasharray={`${upLen} ${circum}`} strokeDashoffset={upOff}
+              transform="rotate(-90 50 50)" strokeLinecap="butt" />
+            {/* 유지 — 회색 */}
+            <circle cx={50} cy={50} r={DONUT_R} fill="none" stroke="#64748b" strokeWidth={DONUT_SW}
+              strokeDasharray={`${stayLen} ${circum}`} strokeDashoffset={stayOff}
+              transform="rotate(-90 50 50)" strokeLinecap="butt" />
+            {/* 하락 — 파랑 */}
+            <circle cx={50} cy={50} r={DONUT_R} fill="none" stroke="#3B82F6" strokeWidth={DONUT_SW}
+              strokeDasharray={`${downLen} ${circum}`} strokeDashoffset={downOff}
+              transform="rotate(-90 50 50)" strokeLinecap="butt" />
+            <text x={50} y={46} textAnchor="middle" fill="white" fontSize="11" fontWeight="700">{stayPct}%</text>
+            <text x={50} y={58} textAnchor="middle" fill="#64748b" fontSize="9">유지</text>
+          </svg>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /><span className="text-slate-400">상승 {upPct}%</span></div>
+            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block" /><span className="text-slate-400">유지 {stayPct}%</span></div>
+            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /><span className="text-slate-400">하락 {downPct}%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LiveMRI() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [trendData, setTrendData] = useState(null)
   const sectionRef = useRef(null)
 
   const fetchMRI = async (force = false) => {
@@ -103,9 +212,19 @@ export default function LiveMRI() {
     }
   }
 
+  const fetchTrend = async () => {
+    try {
+      const res = await api.get('/mri/trend', { timeout: 120000 })
+      setTrendData(res.data)
+    } catch {
+      // 추세 데이터 없으면 차트 미표시
+    }
+  }
+
   useEffect(() => {
     fetchMRI()
-    const id = setInterval(() => fetchMRI(), 3600000) // 1시간마다 자동 갱신
+    fetchTrend()
+    const id = setInterval(() => { fetchMRI(); fetchTrend() }, 3600000)
     return () => clearInterval(id)
   }, [])
 
@@ -354,6 +473,9 @@ export default function LiveMRI() {
             )}
           </motion.div>
         </div>
+
+        {/* MRI 추세 차트 */}
+        <MRITrendChart trendData={trendData} />
       </div>
     </section>
   )

@@ -819,22 +819,40 @@ def predict_mri_trend(
     else:
         f_forecast = [float(latest["F"])] * forecast_months
 
-    # ── V 예측: 과거 동월 계절 평균 ───────────────────────────────────────
+    # ── V 예측: BPA LSTM 예측 → 12개월 롤링 YoY ─────────────────────────
+    # build_real_mri_series()와 동일한 방법론 유지
     bpa_df = load_bpa_monthly_history(data_dir)
     v_forecast = []
-    for i in range(1, forecast_months + 1):
-        pred_date = current_date + pd.DateOffset(months=i)
-        if bpa_df is not None and not bpa_df.empty:
-            same_month = bpa_df[bpa_df["date"].dt.month == pred_date.month]
-            if not same_month.empty:
-                # 과거 동월 YoY 변화율 평균
-                sm = same_month.sort_values("date")
-                yoy = sm["throughput"].pct_change(1).mean()  # 연간 단위 의미로 근사
-                v_forecast.append(max(0.0, min(-yoy / 0.10, 1.0)))
+    if bpa_df is not None and not bpa_df.empty:
+        # LSTM으로 미래 3개월 BPA 물동량 예측
+        bpa_pred_df = forecast_bpa_lstm(bpa_df, n_months=forecast_months)
+        if bpa_pred_df is not None:
+            # 과거 + 예측 물동량 연결
+            bpa_extended = (
+                pd.concat([bpa_df, bpa_pred_df])
+                .sort_values("date")
+                .drop_duplicates("date")
+                .reset_index(drop=True)
+            )
+        else:
+            bpa_extended = bpa_df.copy()
+
+        # 12개월 롤링 YoY (build_real_mri_series와 동일 공식)
+        rolling_annual = bpa_extended["throughput"].rolling(12, min_periods=6).sum()
+        yoy_rolling    = rolling_annual.pct_change(12)
+        v_series       = (-yoy_rolling / 0.10).clip(0, 1).fillna(0)
+
+        # 예측 기간에 해당하는 V 값 추출
+        for i in range(1, forecast_months + 1):
+            pred_date = current_date + pd.DateOffset(months=i)
+            mask = bpa_extended["date"].dt.to_period("M") == pred_date.to_period("M")
+            if mask.any():
+                idx = bpa_extended[mask].index[0]
+                v_forecast.append(float(v_series.iloc[idx]))
             else:
                 v_forecast.append(float(latest["V"]))
-        else:
-            v_forecast.append(float(latest["V"]))
+    else:
+        v_forecast = [float(latest["V"])] * forecast_months
 
     # ── G, D, P: 현재값 유지 + 소폭 감쇠 (시간 경과 → 불확실성 반영) ────
     decay = [1.0, 0.90, 0.82]
