@@ -36,6 +36,7 @@ data/*.csv
 !data/gdelt_maritime_monthly.csv
 !data/kcci_weekly.csv
 data/*.xlsx
+!data/260414_홈페이지 업데이트_전국항 및 부산항 컨테이너 물동량('25년 기준).xlsx
 data/ecos_cache/
 
 # 출력물 (자동 생성)
