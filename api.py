@@ -59,6 +59,26 @@ app.add_middleware(
 _NEWS_CACHE: pd.DataFrame | None = None
 _MRI_CACHE:  dict | None         = None
 
+_GEO_SIGNALS = {
+    'iran', 'hormuz', '이란', '호르무즈', 'houthi', '후티',
+    'blockade', '봉쇄', 'red sea', '홍해', 'war', 'conflict',
+    'attack', 'seizure', 'strait', 'suez', '수에즈',
+}
+
+
+def _effective_category(category: str, news_kws: list[str], sub: dict) -> str:
+    """top_category='정상'이지만 키워드/sub_indices에 실제 리스크 신호가 있으면 보정."""
+    if category != '정상':
+        return category
+    kw_lower = {k.lower() for k in news_kws}
+    if kw_lower & _GEO_SIGNALS or sub.get('G', 0) > 0.4:
+        return '지정학분쟁'
+    if sub.get('P', 0) > 0.4:
+        return '관세정책'
+    if sub.get('F', 0) > 0.4:
+        return '운임급등'
+    return category
+
 
 def _get_mri_data() -> dict:
     """MRI 계산 결과 캐시 (프로세스 내 1회)."""
@@ -192,7 +212,8 @@ def get_mri(refresh: bool = False):
         _NEWS_CACHE = None
     data = _get_mri_data()
     news_kws = data.get('top_keywords', [])
-    risk_ctx = build_risk_context(data['mri'], data['category'], news_keywords=news_kws)
+    effective_cat = _effective_category(data['category'], news_kws, data.get('sub_indices', {}))
+    risk_ctx = build_risk_context(data['mri'], effective_cat, news_keywords=news_kws)
 
     # 최근 해운 뉴스 헤드라인 (최대 5건, _NEWS_CACHE에서 추출)
     recent_news: list[dict] = []
