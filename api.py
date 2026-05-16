@@ -113,11 +113,11 @@ def _get_mri_data() -> dict:
     cat = top_category(news_df)
     sub = mri_sub_indices(news_df, freight_df)
 
-    # 뉴스 타이틀에서 상위 키워드 추출 (top_category 우선, 나머지 보충)
+    # 뉴스 타이틀에서 상위 키워드 추출 (위험도 높은 카테고리 우선)
     extracted_kws: list[str] = []
     if not news_df.empty and 'title' in news_df.columns:
         all_titles = ' '.join(news_df['title'].fillna('').tolist()).lower()
-        check_order = [cat] + [c for c in RISK_KEYWORDS if c != cat]
+        check_order = ['지정학분쟁', '항만파업', '관세정책', '운임급등', '기상재해', '정상']
         for check_cat in check_order:
             for kw in RISK_KEYWORDS.get(check_cat, []):
                 if len(kw) >= 2 and kw.lower() in all_titles and kw not in extracted_kws:
@@ -215,10 +215,14 @@ def get_mri(refresh: bool = False):
     effective_cat = _effective_category(data['category'], news_kws, data.get('sub_indices', {}))
     risk_ctx = build_risk_context(data['mri'], effective_cat, news_keywords=news_kws)
 
-    # 최근 해운 뉴스 헤드라인 (최대 5건, _NEWS_CACHE에서 추출)
+    # 최근 해운 뉴스 헤드라인 (리스크 높은 기사 우선, 최대 5건)
     recent_news: list[dict] = []
     if _NEWS_CACHE is not None and not _NEWS_CACHE.empty:
-        for _, row in _NEWS_CACHE.head(5).iterrows():
+        _risk_ord = {'지정학분쟁': 0, '항만파업': 1, '관세정책': 2, '운임급등': 3, '기상재해': 4, '정상': 5}
+        _sorted = _NEWS_CACHE.copy()
+        _sorted['_ro'] = _sorted['pred_category'].map(lambda x: _risk_ord.get(str(x), 5))
+        _sorted = _sorted.sort_values('_ro').drop(columns=['_ro'])
+        for _, row in _sorted.head(5).iterrows():
             title = str(row.get('title', ''))
             if title and title.lower() not in ('nan', ''):
                 recent_news.append({
