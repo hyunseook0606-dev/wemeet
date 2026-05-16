@@ -215,14 +215,10 @@ def get_mri(refresh: bool = False):
     effective_cat = _effective_category(data['category'], news_kws, data.get('sub_indices', {}))
     risk_ctx = build_risk_context(data['mri'], effective_cat, news_keywords=news_kws)
 
-    # 최근 해운 뉴스 헤드라인 (리스크 높은 기사 우선, 최대 5건)
+    # 최근 해운 뉴스 헤드라인 (최대 5건, 수집 순서 유지)
     recent_news: list[dict] = []
     if _NEWS_CACHE is not None and not _NEWS_CACHE.empty:
-        _risk_ord = {'지정학분쟁': 0, '항만파업': 1, '관세정책': 2, '운임급등': 3, '기상재해': 4, '정상': 5}
-        _sorted = _NEWS_CACHE.copy()
-        _sorted['_ro'] = _sorted['pred_category'].map(lambda x: _risk_ord.get(str(x), 5))
-        _sorted = _sorted.sort_values('_ro').drop(columns=['_ro'])
-        for _, row in _sorted.head(5).iterrows():
+        for _, row in _NEWS_CACHE.head(5).iterrows():
             title = str(row.get('title', ''))
             if title and title.lower() not in ('nan', ''):
                 recent_news.append({
