@@ -119,6 +119,7 @@ def _get_mri_data() -> dict:
         'data_source':  data_source,   # 'realtime' | 'simulation'
         'news_count':   news_count,    # 실뉴스 기사 수 (0이면 시뮬)
         'kcci_loaded':  freight_df is not None,
+        'cached_at':    datetime.now().strftime('%Y-%m-%d %H:%M KST'),
     }
     return _MRI_CACHE
 
@@ -285,9 +286,10 @@ def register_shipment(req: ShipmentRequest):
     mri_data = _get_mri_data()
     mri      = mri_data['mri']
     category = mri_data['category']
+    news_kws = mri_data.get('top_keywords', [])
 
     # 리스크 맥락 구성 (과거 유사사례 + 현재 이슈 요약)
-    risk_ctx = build_risk_context(mri, category)
+    risk_ctx = build_risk_context(mri, category, news_keywords=news_kws)
 
     if req.route not in ROUTE_INFO:
         raise HTTPException(400, f'알 수 없는 항로: {req.route}')

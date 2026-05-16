@@ -74,6 +74,7 @@ const MOCK_DATA = {
   top_category: '운임급등',
   current_issue: '글로벌 운임 상승세 지속 중',
   top_keywords: ['운임', '급등', 'SCFI', '선복', '부족'],
+  sub_indices: { G: 0.30, D: 0.30, F: 0.55, V: 0.10, P: 0.15 },
   data_source: 'mock',
 }
 
