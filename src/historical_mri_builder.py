@@ -610,6 +610,26 @@ def build_real_mri_series(
         yoy_rolling    = rolling_annual.pct_change(12)
         result["V"] = (-yoy_rolling / 0.10).clip(0, 1).fillna(0).values
         sources.append("V:real(BPA-rollingYoY)")
+
+        # torch 없는 환경: BPA LSTM 사전계산 캐시로 갭 월 V 보정
+        _bpa_cache_path = data_dir / "bpa_forecast_cache.json"
+        try:
+            import torch as _torch_chk
+            del _torch_chk
+        except ImportError:
+            if _bpa_cache_path.exists():
+                try:
+                    with open(_bpa_cache_path, encoding="utf-8") as _fc:
+                        _vc_data = json.load(_fc)
+                    for _ym, _vval in _vc_data.get("v_overrides", {}).items():
+                        _vmask = result["date"].dt.strftime("%Y-%m") == _ym
+                        result.loc[_vmask, "V"] = min(max(float(_vval), 0.0), 1.0)
+                    if _vc_data.get("v_overrides"):
+                        logger.info("BPA V 캐시 적용 (torch 미설치): %s",
+                                    list(_vc_data["v_overrides"].keys()))
+                        sources[-1] += "+cache"
+                except Exception as _cache_err:
+                    logger.warning("BPA 예측 캐시 로드 실패: %s", _cache_err)
     else:
         rng2 = np.random.default_rng(43)
         result["V"] = rng2.beta(1, 20, n) * 0.05

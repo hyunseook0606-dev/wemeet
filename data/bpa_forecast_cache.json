@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-05-16",
+  "source": "torch_lstm_local",
+  "note": "팀원 로컬(torch 환경) LSTM 예측값. torch 없는 Render 배포 시 V 차원 보정용. 매월 팀원이 재계산 후 업데이트.",
+  "v_overrides": {
+    "2026-04": 0.104,
+    "2026-05": 0.104
+  }
+}
